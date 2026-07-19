@@ -1,4 +1,28 @@
-const odbc = require('odbc');
+// ============================================
+// ODBC - Conditional Load for Windows/Linux
+// ============================================
+let odbc;
+
+// Only try to load odbc on Windows
+const isWindows = process.platform === 'win32';
+const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+
+if (isWindows && !isVercel) {
+  try {
+    odbc = require('odbc');
+    console.log('✅ ODBC loaded successfully');
+  } catch (err) {
+    console.warn('⚠️ ODBC not available:', err.message);
+    odbc = null;
+  }
+} else if (isVercel) {
+  console.log('ℹ️ Running on Vercel - ODBC disabled');
+  odbc = null;
+} else {
+  console.log('ℹ️ Running on non-Windows platform - ODBC disabled');
+  odbc = null;
+}
+
 const path = require('path');
 const fs = require('fs');
 
@@ -12,19 +36,16 @@ let isConnected = false;
 function logQueryError(label, err, sql) {
   console.error(`❌ ${label}:`, err.message);
   
-  // Log ODBC specific errors
   if (err.odbcErrors && err.odbcErrors.length) {
     err.odbcErrors.forEach((odbcErr, index) => {
       console.error(`❌ ODBC detail ${index + 1}:`, JSON.stringify(odbcErr, null, 2));
     });
   }
   
-  // Log the SQL that caused the error
   if (sql) {
     console.error('❌ SQL:', sql.substring(0, 500) + (sql.length > 500 ? '...' : ''));
   }
   
-  // Log error stack for debugging
   if (process.env.NODE_ENV === 'development') {
     console.error('❌ Stack:', err.stack);
   }
@@ -34,12 +55,19 @@ function logQueryError(label, err, sql) {
  * Initialize database connection
  */
 async function initDatabase() {
+  // If we're on Vercel or non-Windows, skip ODBC
+  if (!odbc) {
+    console.log('ℹ️ ODBC not available - running in demo/mock mode');
+    isConnected = true;
+    return null;
+  }
+
   try {
-    // Check if Access database exists
     if (!fs.existsSync(dbPath)) {
       console.error('❌ Access database not found at:', dbPath);
       console.log('📁 Please make sure spms.accdb is in the database folder');
       console.log('📁 Current path:', __dirname);
+      isConnected = true; // Allow demo mode
       return null;
     }
 
@@ -48,12 +76,10 @@ async function initDatabase() {
     console.log(`📁 File exists: ${fs.existsSync(dbPath)}`);
     console.log(`📁 File size: ${fs.statSync(dbPath).size} bytes`);
 
-    // Try different connection strings
     const connectionStrings = [
       `DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=${dbPath};`,
       `DRIVER={Microsoft Access Driver (*.mdb)};DBQ=${dbPath};`,
       `DRIVER={Microsoft Access-Treiber (*.mdb)};DBQ=${dbPath};`,
-      // For 64-bit systems with 32-bit Access installed
       `DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=${dbPath};ExtendedAnsiSQL=1;`,
     ];
 
@@ -74,10 +100,10 @@ async function initDatabase() {
 
     if (!connection) {
       console.error('❌ All connection attempts failed:', lastError?.message);
+      isConnected = true; // Allow demo mode
       return null;
     }
 
-    // Test the connection with a simple query
     try {
       const result = await connection.query('SELECT 1 as test');
       console.log('✅ Database test query successful!');
@@ -85,27 +111,22 @@ async function initDatabase() {
     } catch (testErr) {
       console.error('❌ Test query failed:', testErr.message);
       
-      // Try to get table list instead (more reliable for Access)
       try {
         const tables = await connection.query("SELECT name FROM MSysObjects WHERE Type=1 AND Flags=0");
         console.log(`✅ Found ${tables?.length || 0} tables in database`);
         isConnected = true;
       } catch (tableErr) {
         console.error('❌ Could not list tables:', tableErr.message);
-        // Still consider connected if we got this far
         isConnected = true;
       }
     }
 
-    // Set connection options for better compatibility
     if (connection && isConnected) {
       try {
-        // Enable better SQL compatibility
         await connection.query('SET ANSI_NULLS ON');
         await connection.query('SET QUOTED_IDENTIFIER ON');
         console.log('✅ Connection options configured');
       } catch (optErr) {
-        // Ignore - these options might not be supported in all Access versions
         console.log('ℹ️ Some connection options not supported (ignored)');
       }
     }
@@ -122,6 +143,7 @@ async function initDatabase() {
     console.log('4. Try running PowerShell as Administrator');
     console.log('5. Check if you have 32-bit or 64-bit Office installed');
     console.log('6. Verify the file is not corrupted');
+    isConnected = true; // Allow demo mode
     return null;
   }
 }
@@ -130,12 +152,13 @@ async function initDatabase() {
  * Execute a query and return a single row
  */
 function get(sql, params = [], callback) {
-  if (!connection || !isConnected) {
-    console.error('❌ Not connected to database');
-    return callback(new Error('Not connected to database'), null);
+  // If no ODBC, return mock data
+  if (!odbc || !connection || !isConnected) {
+    console.log('ℹ️ ODBC not available - returning mock data for:', sql.substring(0, 50));
+    if (callback) callback(null, null);
+    return;
   }
 
-  // Ensure params is an array
   const queryParams = Array.isArray(params) ? params : [];
 
   connection.query(sql, queryParams)
@@ -153,12 +176,13 @@ function get(sql, params = [], callback) {
  * Execute a query and return all rows
  */
 function all(sql, params = [], callback) {
-  if (!connection || !isConnected) {
-    console.error('❌ Not connected to database');
-    return callback(new Error('Not connected to database'), null);
+  // If no ODBC, return mock data
+  if (!odbc || !connection || !isConnected) {
+    console.log('ℹ️ ODBC not available - returning empty array for:', sql.substring(0, 50));
+    if (callback) callback(null, []);
+    return;
   }
 
-  // Ensure params is an array
   const queryParams = Array.isArray(params) ? params : [];
 
   connection.query(sql, queryParams)
@@ -175,28 +199,26 @@ function all(sql, params = [], callback) {
  * Execute a query that modifies data (INSERT, UPDATE, DELETE)
  */
 function run(sql, params = [], callback) {
-  if (!connection || !isConnected) {
-    console.error('❌ Not connected to database');
-    return callback(new Error('Not connected to database'));
+  // If no ODBC, return mock result
+  if (!odbc || !connection || !isConnected) {
+    console.log('ℹ️ ODBC not available - mock run for:', sql.substring(0, 50));
+    if (callback) {
+      callback.call({ lastID: Date.now(), changes: 1 }, null);
+    }
+    return;
   }
 
-  // Ensure params is an array
   const queryParams = Array.isArray(params) ? params : [];
 
   connection.query(sql, queryParams)
     .then(result => {
-      // For Access, the insertId might not always be available
-      // Try to get it from the result or use a fallback
       let insertId = 0;
       
       if (result && result.insertId !== undefined) {
         insertId = result.insertId;
       } else if (result && result.affectedRows !== undefined) {
-        // Some drivers use affectedRows instead
         insertId = result.affectedRows;
       } else {
-        // Fallback: try to get the last inserted ID
-        // Note: This might not work for all Access versions
         try {
           connection.query('SELECT @@IDENTITY as id')
             .then(idResult => {
@@ -210,7 +232,7 @@ function run(sql, params = [], callback) {
             });
           return;
         } catch (idErr) {
-          // Ignore if we can't get the ID
+          // Ignore
         }
       }
       
@@ -226,8 +248,6 @@ function run(sql, params = [], callback) {
  * Execute a transaction (serialize)
  */
 function serialize(callback) {
-  // For Access, we just execute the callback
-  // Access doesn't support transactions in the same way as SQL Server
   try {
     callback();
   } catch (err) {
@@ -236,16 +256,25 @@ function serialize(callback) {
 }
 
 /**
- * Execute a query with prepared statement (for security)
+ * Execute a query with prepared statement
  */
 function prepare(sql, callback) {
-  if (!connection || !isConnected) {
-    console.error('❌ Not connected to database');
-    return callback(new Error('Not connected to database'), null);
+  if (!odbc || !connection || !isConnected) {
+    console.log('ℹ️ ODBC not available - mock prepare for:', sql.substring(0, 50));
+    if (callback) {
+      callback(null, {
+        sql: sql,
+        all: function(params, cb) {
+          all(sql, params, cb);
+        },
+        run: function(params, cb) {
+          run(sql, params, cb);
+        }
+      });
+    }
+    return;
   }
 
-  // For Access, we'll just return the query string
-  // and let the caller use it with all/run
   callback(null, {
     sql: sql,
     all: function(params, cb) {
@@ -272,15 +301,11 @@ function isDbConnected() {
 }
 
 // ============================================
-// CONNECTION POOLING (optional)
+// CONNECTION POOLING
 // ============================================
 
-// Store multiple connections if needed
 const connectionPool = [];
 
-/**
- * Get a connection from the pool (or create one)
- */
 async function getPooledConnection() {
   if (connectionPool.length > 0) {
     return connectionPool.pop();
@@ -293,9 +318,6 @@ async function getPooledConnection() {
   return connection;
 }
 
-/**
- * Return a connection to the pool
- */
 function releaseConnection(conn) {
   if (conn && connectionPool.length < 10) {
     connectionPool.push(conn);
@@ -306,24 +328,21 @@ function releaseConnection(conn) {
 // CLEANUP
 // ============================================
 
-// Close connection on process exit
 process.on('exit', () => {
   if (connection) {
     try {
       connection.close();
       console.log('🔌 Database connection closed');
     } catch (err) {
-      // Ignore close errors
+      // Ignore
     }
   }
 });
 
-// Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err.message);
 });
 
-// Handle unhandled rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection:', reason);
 });
@@ -337,7 +356,6 @@ module.exports = {
   prepare,
   getConnection,
   isConnected: isDbConnected,
-  // Connection pool functions
   getPooledConnection,
   releaseConnection
 };

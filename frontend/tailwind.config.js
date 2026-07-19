@@ -1,0 +1,104 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  darkMode: 'class',
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        // Your existing brand color — kept exactly as-is
+        brand: {
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          200: '#c7d2fe',
+          300: '#a5b4fc',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+          800: '#3730a3',
+          900: '#312e81',
+          950: '#1e1b4b',
+        },
+        // Missing entirely — every Card/Layout/StatCard/Badge/Button in
+        // your app uses these surface-* classes for backgrounds/text/borders
+        surface: {
+          0: '#ffffff',
+          50: '#f7f8fa',
+          100: '#eef0f4',
+          200: '#e2e5eb',
+          300: '#cbd0d9',
+          400: '#9aa1b0',
+          500: '#6b7280',
+          600: '#4b5160',
+          700: '#353a47',
+          800: '#22252e',
+          900: '#16181e',
+          950: '#0d0e12',
+        },
+        // Missing entirely — Badge tones, Button danger variant, StatCard
+        // tone icons, ConfirmDialog, and toast icons all reference these
+        success: { 50: '#ecfdf5', 100: '#d1fae5', 500: '#10b981', 600: '#059669', 900: '#064e3b' },
+        warning: { 50: '#fffbeb', 100: '#fef3c7', 500: '#f59e0b', 600: '#d97706', 900: '#78350f' },
+        danger:  { 50: '#fef2f2', 100: '#fee2e2', 500: '#ef4444', 600: '#dc2626', 900: '#7f1d1d' },
+        info:    { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 900: '#1e3a8a' },
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+      },
+      fontSize: {
+        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
+      },
+      borderRadius: {
+        lg: '10px',
+        xl: '14px',
+        '2xl': '18px',
+      },
+      // Missing entirely — every Card/StatCard uses shadow-soft-* classes.
+      // Without these, Tailwind falls back to its default (much flatter)
+      // shadow-* classes or nothing at all, which is the "flat" look.
+      boxShadow: {
+        'soft-sm': '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 1px 0 rgb(15 23 42 / 0.03)',
+        'soft': '0 2px 8px -2px rgb(15 23 42 / 0.06), 0 1px 3px -1px rgb(15 23 42 / 0.05)',
+        'soft-md': '0 8px 24px -4px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.05)',
+        'soft-lg': '0 16px 40px -8px rgb(15 23 42 / 0.12), 0 4px 12px -4px rgb(15 23 42 / 0.06)',
+      },
+      spacing: {
+        '18': '4.5rem',
+        '72': '18rem',
+        '84': '21rem',
+      },
+      transitionTimingFunction: {
+        'out-soft': 'cubic-bezier(0.16, 1, 0.3, 1)',
+      },
+      // Missing entirely — Layout's mobile drawer, ToastContext's toasts,
+      // and Modal all reference animate-[modal-in_...]/[toast-in_...]/
+      // [drawer-in_...] classes. Without these keyframes defined, those
+      // classes do nothing and everything just pops in instantly.
+      keyframes: {
+        'modal-in': {
+          '0%': { opacity: '0', transform: 'translateY(8px) scale(0.98)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        'toast-in': {
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'drawer-in': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+        'page-in': {
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+    },
+  },
+  plugins: [],content: [
+  "./index.html",
+  "./src/**/*.{js,ts,jsx,tsx}",
+],
+}

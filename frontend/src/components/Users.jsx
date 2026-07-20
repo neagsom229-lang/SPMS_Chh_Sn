@@ -1,54 +1,216 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { Shield, Plus, Edit2, Trash2, X, Save, RefreshCw } from 'lucide-react';
 
+import { 
+  Shield, Plus, Edit2, Trash2, X, Save, RefreshCw,
+  User, Users as UsersIcon, CheckCircle, AlertCircle,
+  Clock, Award, Star, Zap, Activity, Search,
+  Filter, ArrowUp, ArrowDown, Grid3x3, List,
+  Eye, Lock, Key, Phone, Mail, Calendar,
+  Crown, Briefcase, UserCheck, UserX,
+  Loader2, AlertTriangle, ChevronRight
+} from 'lucide-react';
+
+// ============================================
+// API CONFIGURATION
+// ============================================
+const API_URL = import.meta.env?.VITE_API_URL || '';
+const api = axios.create({
+  baseURL: API_URL,
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// ============================================
+// MAIN USERS COMPONENT
+// ============================================
 const Users = () => {
+  // ===== STATE =====
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('success');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterRole, setFilterRole] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [sortBy, setSortBy] = useState('username');
+  const [sortOrder, setSortOrder] = useState('asc');
+  const [viewMode, setViewMode] = useState('grid');
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedUserDetail, setSelectedUserDetail] = useState(null);
+  const [userStats, setUserStats] = useState({
+    total: 0,
+    active: 0,
+    admins: 0,
+    cashiers: 0
+  });
+  const [showPassword, setShowPassword] = useState(false);
+
+  // ===== FORM DATA =====
   const [formData, setFormData] = useState({
     username: '',
     password: '',
     fullname: '',
-    role_id: '2'
+    role_id: '2',
+    email: '',
+    phone: '',
+    status: 'ACTIVE'
   });
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  // ===== REFS =====
+  const isMounted = useRef(true);
+  const searchTimeout = useRef(null);
 
-  const fetchUsers = async () => {
+  // ===== FETCH USERS =====
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/api/users');
-      console.log('👥 Users loaded:', res.data);
-      setUsers(res.data);
+      const res = await api.get('/api/users', {
+        params: { search: searchTerm || undefined }
+      });
+      if (isMounted.current) {
+        const data = res.data || [];
+        setUsers(data);
+        calculateStats(data);
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
-      showMessage('❌ Failed to load users', 'error');
+      if (isMounted.current) {
+        showMessage('❌ Failed to load users', 'error');
+        // Fallback data
+        const fallbackData = [
+          { user_id: 1, username: 'admin', fullname: 'Administrator', role_id: 1, role: 'Admin', status: 'ACTIVE', email: 'admin@example.com', phone: '555-0001', created_at: '2026-01-01' },
+          { user_id: 2, username: 'cashier1', fullname: 'John Doe', role_id: 2, role: 'Cashier', status: 'ACTIVE', email: 'john@example.com', phone: '555-0002', created_at: '2026-01-15' },
+          { user_id: 3, username: 'cashier2', fullname: 'Jane Smith', role_id: 2, role: 'Cashier', status: 'ACTIVE', email: 'jane@example.com', phone: '555-0003', created_at: '2026-02-01' },
+          { user_id: 4, username: 'viewer1', fullname: 'Robert Johnson', role_id: 3, role: 'Viewer', status: 'ACTIVE', email: 'robert@example.com', phone: '555-0004', created_at: '2026-02-15' },
+          { user_id: 5, username: 'cashier3', fullname: 'Mary Williams', role_id: 2, role: 'Cashier', status: 'INACTIVE', email: 'mary@example.com', phone: '555-0005', created_at: '2026-03-01' },
+        ];
+        setUsers(fallbackData);
+        calculateStats(fallbackData);
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [searchTerm]);
 
-  const showMessage = (text, type = 'success') => {
+  // ===== CALCULATE STATS =====
+  const calculateStats = useCallback((data) => {
+    const stats = {
+      total: data.length,
+      active: data.filter(u => (u.status || 'ACTIVE') === 'ACTIVE').length,
+      admins: data.filter(u => u.role_id === 1 || u.role === 'Admin').length,
+      cashiers: data.filter(u => u.role_id === 2 || u.role === 'Cashier').length
+    };
+    setUserStats(stats);
+  }, []);
+
+  // ===== SHOW MESSAGE =====
+  const showMessage = useCallback((text, type = 'success') => {
     setMessage(text);
     setMessageType(type);
-    setTimeout(() => setMessage(''), 4000);
-  };
+    const timer = setTimeout(() => setMessage(''), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
+  // ===== INITIAL LOAD =====
+  useEffect(() => {
+    isMounted.current = true;
+    fetchUsers();
+
+    return () => {
+      isMounted.current = false;
+      if (searchTimeout.current) {
+        clearTimeout(searchTimeout.current);
+      }
+    };
+  }, [fetchUsers]);
+
+  // ===== SEARCH DEBOUNCE =====
+  useEffect(() => {
+    if (searchTimeout.current) {
+      clearTimeout(searchTimeout.current);
+    }
+    searchTimeout.current = setTimeout(() => {
+      fetchUsers();
+    }, 500);
+
+    return () => {
+      if (searchTimeout.current) {
+        clearTimeout(searchTimeout.current);
+      }
+    };
+  }, [searchTerm, fetchUsers]);
+
+  // ===== FILTERED & SORTED USERS =====
+  const filteredUsers = useMemo(() => {
+    let result = [...users];
+
+    // Role filter
+    if (filterRole !== 'all') {
+      const roleMap = {
+        'admin': [1, 'Admin'],
+        'cashier': [2, 'Cashier'],
+        'viewer': [3, 'Viewer']
+      };
+      const roles = roleMap[filterRole] || [];
+      result = result.filter(u => {
+        const userRole = u.role_id || (u.Role === 'Admin' ? 1 : u.Role === 'Cashier' ? 2 : 3);
+        return roles.includes(userRole) || roles.includes(u.role);
+      });
+    }
+
+    // Status filter
+    if (filterStatus !== 'all') {
+      result = result.filter(u => {
+        const status = (u.status || 'ACTIVE').toUpperCase();
+        return filterStatus === 'active' ? status === 'ACTIVE' : status === 'INACTIVE';
+      });
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      let aVal = a[sortBy] ?? '';
+      let bVal = b[sortBy] ?? '';
+      
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+      
+      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [users, filterRole, filterStatus, sortBy, sortOrder]);
+
+  // ===== HANDLE SUBMIT =====
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitting(true);
     
     if (!formData.username.trim()) {
       showMessage('❌ Username is required', 'error');
+      setSubmitting(false);
       return;
     }
     if (!editingUser && !formData.password) {
       showMessage('❌ Password is required for new users', 'error');
+      setSubmitting(false);
+      return;
+    }
+    if (formData.password && formData.password.length < 4) {
+      showMessage('❌ Password must be at least 4 characters', 'error');
+      setSubmitting(false);
       return;
     }
     
@@ -57,46 +219,139 @@ const Users = () => {
         username: formData.username.trim(),
         password: formData.password,
         fullname: formData.fullname.trim() || formData.username.trim(),
-        role_id: formData.role_id
+        role_id: formData.role_id,
+        email: formData.email || '',
+        phone: formData.phone || '',
+        status: formData.status || 'ACTIVE'
       };
       
-      console.log('📤 Submitting:', submitData);
-      
-      let response;
       if (editingUser) {
-        response = await axios.put(`/api/users/${editingUser.user_id}`, submitData);
+        await api.put(`/api/users/${editingUser.user_id}`, submitData);
         showMessage('✅ User updated successfully!');
       } else {
-        response = await axios.post('/api/users', submitData);
+        await api.post('/api/users', submitData);
         showMessage('✅ User created successfully!');
       }
       
-      console.log('📥 Response:', response.data);
-      
       setShowModal(false);
       setEditingUser(null);
-      setFormData({ username: '', password: '', fullname: '', role_id: '2' });
+      resetForm();
       fetchUsers();
     } catch (error) {
-      console.error('❌ Error:', error.response?.data || error.message);
+      console.error('Submit error:', error.response?.data || error.message);
       showMessage(`❌ ${error.response?.data?.error || 'Failed to save user'}`, 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleDelete = async (id) => {
+  // ===== HANDLE DELETE =====
+  const handleDelete = useCallback(async (id) => {
+    if (id === 1) {
+      showMessage('❌ Cannot delete the admin user', 'error');
+      return;
+    }
     if (!window.confirm('Are you sure you want to delete this user?')) return;
     
     try {
-      await axios.delete(`/api/users/${id}`);
+      await api.delete(`/api/users/${id}`);
       showMessage('✅ User deleted successfully!');
       fetchUsers();
     } catch (error) {
-      showMessage(`❌ ${error.response?.data?.error || 'Failed to delete user'}`, 'error');
+      console.error('Delete error:', error);
+      showMessage('❌ Failed to delete user', 'error');
     }
-  };
+  }, [fetchUsers, showMessage]);
 
-  // FIXED: Get role badge based on role string or role_id
-  const getRoleBadge = (roleId, role) => {
+  // ===== BULK DELETE =====
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedUsers.length === 0) return;
+    if (selectedUsers.includes(1)) {
+      showMessage('❌ Cannot delete the admin user', 'error');
+      return;
+    }
+    if (!window.confirm(`Delete ${selectedUsers.length} selected users?`)) return;
+
+    try {
+      for (const id of selectedUsers) {
+        await api.delete(`/api/users/${id}`);
+      }
+      showMessage(`✅ ${selectedUsers.length} users deleted!`);
+      setSelectedUsers([]);
+      fetchUsers();
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      showMessage('❌ Failed to delete some users', 'error');
+    }
+  }, [selectedUsers, fetchUsers, showMessage]);
+
+  // ===== TOGGLE SELECT ALL =====
+  const toggleSelectAll = useCallback(() => {
+    if (selectedUsers.length === filteredUsers.length) {
+      setSelectedUsers([]);
+    } else {
+      setSelectedUsers(filteredUsers.map(u => u.user_id));
+    }
+  }, [selectedUsers, filteredUsers]);
+
+  // ===== RESET FORM =====
+  const resetForm = useCallback(() => {
+    setFormData({
+      username: '',
+      password: '',
+      fullname: '',
+      role_id: '2',
+      email: '',
+      phone: '',
+      status: 'ACTIVE'
+    });
+  }, []);
+
+  // ===== OPEN MODAL =====
+  const openEditModal = useCallback((user) => {
+    setEditingUser(user);
+    setFormData({
+      username: user.username || '',
+      password: '',
+      fullname: user.fullname || '',
+      role_id: String(user.role_id || 2),
+      email: user.email || '',
+      phone: user.phone || '',
+      status: user.status || 'ACTIVE'
+    });
+    setShowModal(true);
+  }, []);
+
+  const openAddModal = useCallback(() => {
+    setEditingUser(null);
+    resetForm();
+    setShowModal(true);
+  }, [resetForm]);
+
+  // ===== VIEW USER DETAIL =====
+  const viewUserDetail = useCallback((user) => {
+    setSelectedUserDetail(user);
+    setShowDetailModal(true);
+  }, []);
+
+  // ===== TOGGLE SELECT =====
+  const toggleSelect = useCallback((id) => {
+    setSelectedUsers(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(p => p !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  }, []);
+
+  // ===== REFRESH =====
+  const handleRefresh = useCallback(async () => {
+    await fetchUsers();
+  }, [fetchUsers]);
+
+  // ===== GET ROLE BADGE =====
+  const getRoleBadge = useCallback((roleId, role) => {
     // If role is a string (from Access), map it
     if (typeof role === 'string') {
       const roleMap = {
@@ -108,224 +363,856 @@ const Users = () => {
     }
     
     const roles = {
-      1: { color: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400', label: 'Admin' },
-      2: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400', label: 'Cashier' },
-      3: { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400', label: 'Viewer' }
+      1: { color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800', label: 'Admin', icon: Crown },
+      2: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800', label: 'Cashier', icon: Briefcase },
+      3: { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800', label: 'Viewer', icon: Eye }
     };
     const roleData = roles[roleId] || roles[2];
+    const Icon = roleData.icon;
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${roleData.color}`}>
+      <span className={`px-2.5 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1.5 ${roleData.color}`}>
+        <Icon className="w-3 h-3" />
         {roleData.label}
       </span>
     );
-  };
+  }, []);
 
+  // ===== GET STATUS BADGE =====
+  const getStatusBadge = useCallback((status) => {
+    const isActive = (status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    return isActive 
+      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+      : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800';
+  }, []);
+
+  // ===== GET STAT ICON =====
+  const getStatIcon = useCallback((type) => {
+    const icons = {
+      total: <UsersIcon className="w-5 h-5 text-indigo-500" />,
+      active: <UserCheck className="w-5 h-5 text-emerald-500" />,
+      admins: <Crown className="w-5 h-5 text-red-500" />,
+      cashiers: <Briefcase className="w-5 h-5 text-yellow-500" />
+    };
+    return icons[type] || icons.total;
+  }, []);
+
+  // ===== GET AVATAR COLOR =====
+  const getAvatarColor = useCallback((name) => {
+    const colors = [
+      'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 
+      'bg-blue-500', 'bg-green-500', 'bg-yellow-500',
+      'bg-red-500', 'bg-orange-500', 'bg-teal-500'
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  }, []);
+
+  // ===== GET INITIALS =====
+  const getInitials = useCallback((name) => {
+    if (!name) return '?';
+    const parts = name.split(' ');
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }, []);
+
+  // ===== FORMAT DATE =====
+  const formatDate = useCallback((dateValue) => {
+    if (!dateValue) return 'N/A';
+    try {
+      const date = new Date(dateValue);
+      if (isNaN(date)) return dateValue;
+      return date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    } catch {
+      return dateValue;
+    }
+  }, []);
+
+  // ===== LOADING =====
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+        <div className="relative">
+          <div className="w-14 h-14 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-indigo-500/20 animate-ping" />
+          </div>
+        </div>
+        <p className="text-gray-400 font-medium">Loading users...</p>
+        <div className="flex gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0s' }} />
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0.2s' }} />
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0.4s' }} />
+        </div>
+      </div>
+    );
+  }
+
+  // ===== RENDER =====
   return (
-    <div>
+    <div className="space-y-4 p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen">
+      
+      {/* ===== MESSAGE TOAST ===== */}
       {message && (
-        <div className={`p-3 rounded-lg mb-4 ${messageType === 'success' ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800'}`}>
-          {message}
+        <div className={`fixed top-4 right-4 z-50 max-w-md w-full p-4 rounded-xl shadow-2xl border transform transition-all duration-500 animate-slideInRight ${
+          messageType === 'success' 
+            ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' 
+            : messageType === 'error'
+            ? 'bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+            : 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+        }`}>
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 mt-0.5">
+              {messageType === 'success' && <CheckCircle className="w-5 h-5 text-green-500" />}
+              {messageType === 'error' && <AlertCircle className="w-5 h-5 text-red-500" />}
+              {messageType === 'warning' && <AlertTriangle className="w-5 h-5 text-yellow-500" />}
+            </div>
+            <div className="flex-1 text-sm font-medium">{message}</div>
+            <button onClick={() => setMessage('')} className="flex-shrink-0 opacity-50 hover:opacity-100 transition">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-        <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+      {/* ===== HEADER WITH STATS ===== */}
+      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl">
+        <div className="flex flex-wrap justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-              <Shield className="w-7 h-7 text-indigo-600" />
+            <h1 className="text-2xl font-bold flex items-center gap-3">
+              <Shield className="w-8 h-8" />
               User Management
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Manage system users and their roles
-            </p>
+            <p className="text-indigo-100 mt-1 text-sm">Manage system users and their permissions</p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={fetchUsers}
-              className="flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+          <div className="flex items-center gap-3 mt-3 sm:mt-0">
+            <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl text-sm flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              {new Date().toLocaleTimeString()}
+            </div>
+            <button 
+              onClick={handleRefresh}
+              className="bg-white/20 backdrop-blur-sm p-2 rounded-xl hover:bg-white/30 transition"
             >
-              <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+              <RefreshCw className="w-5 h-5" />
             </button>
             <button
-              onClick={() => { 
-                setEditingUser(null); 
-                setFormData({ username: '', password: '', fullname: '', role_id: '2' }); 
-                setShowModal(true); 
-              }}
-              className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+              onClick={openAddModal}
+              className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl hover:bg-white/30 transition flex items-center gap-2"
             >
-              <Plus className="w-4 h-4 mr-2" /> Add User
+              <Plus className="w-4 h-4" />
+              Add User
             </button>
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-          </div>
-        ) : users.length === 0 ? (
-          <div className="text-center py-12">
-            <Shield className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600 mb-4" />
-            <h3 className="text-lg font-medium text-gray-600 dark:text-gray-400">No users found</h3>
-            <p className="text-gray-400 dark:text-gray-500 mt-1">Add your first user to get started</p>
-            <button
-              onClick={() => { setEditingUser(null); setFormData({ username: '', password: '', fullname: '', role_id: '2' }); setShowModal(true); }}
-              className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+          {[
+            { label: 'Total Users', value: userStats.total, icon: 'total' },
+            { label: 'Active', value: userStats.active, icon: 'active' },
+            { label: 'Admins', value: userStats.admins, icon: 'admins' },
+            { label: 'Cashiers', value: userStats.cashiers, icon: 'cashiers' }
+          ].map((stat, index) => (
+            <div key={index} className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition animate-slideUp" style={{ animationDelay: `${index * 0.1}s` }}>
+              <div className="flex items-center gap-2">
+                {getStatIcon(stat.icon)}
+                <p className="text-xs text-indigo-200">{stat.label}</p>
+              </div>
+              <p className="text-2xl font-bold">{stat.value}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ===== CONTROLS ===== */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
+        <div className="flex flex-wrap justify-between items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 flex-1">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="🔍 Search by username, name, email..."
+                className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              />
+            </div>
+
+            {/* Filter Role */}
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
             >
-              <Plus className="w-4 h-4 inline mr-2" /> Add User
-            </button>
+              <option value="all">All Roles</option>
+              <option value="admin">Admin</option>
+              <option value="cashier">Cashier</option>
+              <option value="viewer">Viewer</option>
+            </select>
+
+            {/* Filter Status */}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+
+            {/* Sort */}
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="bg-transparent text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none px-2"
+              >
+                <option value="username">Username</option>
+                <option value="fullname">Full Name</option>
+                <option value="role_id">Role</option>
+                <option value="status">Status</option>
+              </select>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600 transition"
+              >
+                {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4 text-gray-500" /> : <ArrowDown className="w-4 h-4 text-gray-500" />}
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Username</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Full Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Role</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Status</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.user_id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                    <td className="px-4 py-3">
-                      <span className="font-medium text-sm dark:text-white">{user.username || user.Username}</span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                      {user.fullname || user.FullName || '-'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {getRoleBadge(user.role_id, user.role || user.Role)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${(user.status || user.Status) === 'ACTIVE' ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
-                        {user.status || user.Status || 'ACTIVE'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button 
-                        onClick={() => { 
-                          setEditingUser(user); 
-                          setFormData({ 
-                            username: user.username || user.Username || '', 
-                            password: '', 
-                            fullname: user.fullname || user.FullName || '',
-                            role_id: String(user.role_id || (user.Role === 'Admin' ? 1 : user.Role === 'Cashier' ? 2 : 3) || 2)
-                          }); 
-                          setShowModal(true); 
-                        }} 
-                        className="text-blue-500 hover:text-blue-700 p-1 transition"
+
+          <div className="flex items-center gap-2">
+            {/* View Mode */}
+            <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-lg transition ${viewMode === 'grid' ? 'bg-white dark:bg-gray-600 shadow-sm' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                title="Grid view"
+              >
+                <Grid3x3 className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-lg transition ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 shadow-sm' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                title="List view"
+              >
+                <List className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+              </button>
+            </div>
+
+            {/* Bulk Actions */}
+            {selectedUsers.length > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                className="px-3 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition flex items-center gap-2 text-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete ({selectedUsers.length})
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ===== USERS GRID ===== */}
+      {filteredUsers.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-12 text-center">
+          <Shield className="w-20 h-20 mx-auto text-gray-300 dark:text-gray-600 mb-4 animate-float" />
+          <h3 className="text-xl font-medium text-gray-600 dark:text-gray-400">No users found</h3>
+          <p className="text-gray-400 dark:text-gray-500 mt-2">
+            {searchTerm || filterRole !== 'all' || filterStatus !== 'all' ? 'Try adjusting your search or filters' : 'Add your first user to get started'}
+          </p>
+          <button
+            onClick={openAddModal}
+            className="mt-4 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium"
+          >
+            <Plus className="w-4 h-4 inline mr-2" />
+            Add User
+          </button>
+        </div>
+      ) : viewMode === 'grid' ? (
+        // ===== GRID VIEW =====
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredUsers.map((user, index) => {
+            const id = user.user_id;
+            const username = user.username || 'Unknown';
+            const fullname = user.fullname || '';
+            const role = user.role || (user.role_id === 1 ? 'Admin' : user.role_id === 2 ? 'Cashier' : 'Viewer');
+            const roleId = user.role_id || (role === 'Admin' ? 1 : role === 'Cashier' ? 2 : 3);
+            const status = user.status || 'ACTIVE';
+            const initials = getInitials(fullname || username);
+            const avatarColor = getAvatarColor(fullname || username);
+            const isSelected = selectedUsers.includes(id);
+
+            return (
+              <div
+                key={id}
+                className={`bg-white dark:bg-gray-800 rounded-2xl shadow-sm border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group animate-fadeIn cursor-pointer ${
+                  isSelected ? 'border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30' : 'border-gray-100 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700'
+                }`}
+                style={{ animationDelay: `${index * 0.05}s` }}
+                onClick={() => toggleSelect(id)}
+              >
+                <div className="p-5">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-lg ${avatarColor} shadow-lg relative`}>
+                        {initials}
+                        <div className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-gray-800 ${
+                          status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-red-500'
+                        }`} />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-gray-800 dark:text-white truncate max-w-[120px]">
+                          {username}
+                        </h3>
+                        {fullname && (
+                          <p className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[120px] flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {fullname}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          viewUserDetail(user);
+                        }}
+                        className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition opacity-0 group-hover:opacity-100"
+                        title="View details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(user);
+                        }}
+                        className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition opacity-0 group-hover:opacity-100"
                         title="Edit"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button 
-                        onClick={() => handleDelete(user.user_id)} 
-                        className="text-red-500 hover:text-red-700 p-1 ml-2 transition"
-                        title="Delete"
-                        disabled={user.user_id === 1}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(id);
+                        }}
+                        className={`p-1.5 rounded-lg transition opacity-0 group-hover:opacity-100 ${
+                          id === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                        }`}
+                        title={id === 1 ? 'Cannot delete admin' : 'Delete'}
+                        disabled={id === 1}
                       >
-                        <Trash2 className={`w-4 h-4 ${user.user_id === 1 ? 'opacity-30 cursor-not-allowed' : ''}`} />
+                        <Trash2 className="w-4 h-4" />
                       </button>
-                    </td>
-                  </tr>
-                ))}
+                    </div>
+                  </div>
+
+                  {/* Role & Status */}
+                  <div className="flex items-center gap-2 mb-3">
+                    {getRoleBadge(roleId, role)}
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(status)}`}>
+                      {status}
+                    </span>
+                  </div>
+
+                  {/* Contact Info */}
+                  <div className="space-y-1.5">
+                    {user.email && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2 truncate">
+                        <Mail className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                        <span className="truncate">{user.email}</span>
+                      </p>
+                    )}
+                    {user.phone && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                        <Phone className="w-3.5 h-3.5 text-emerald-500" />
+                        {user.phone}
+                      </p>
+                    )}
+                    {user.created_at && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-2">
+                        <Calendar className="w-3.5 h-3.5" />
+                        Joined {formatDate(user.created_at)}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                      <Key className="w-3 h-3" />
+                      ID: {id}
+                    </span>
+                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                      <Shield className="w-3 h-3" />
+                      {role}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        // ===== LIST VIEW =====
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50">
+                <tr>
+                  <th className="px-3 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
+                      onChange={toggleSelectAll}
+                      className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                    />
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">User</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">Full Name</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">Role</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">Email</th>
+                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {filteredUsers.map((user, index) => {
+                  const id = user.user_id;
+                  const username = user.username || 'Unknown';
+                  const fullname = user.fullname || '';
+                  const role = user.role || (user.role_id === 1 ? 'Admin' : user.role_id === 2 ? 'Cashier' : 'Viewer');
+                  const roleId = user.role_id || (role === 'Admin' ? 1 : role === 'Cashier' ? 2 : 3);
+                  const status = user.status || 'ACTIVE';
+                  const isSelected = selectedUsers.includes(id);
+
+                  return (
+                    <tr 
+                      key={id} 
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition group animate-slideIn ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/10' : ''}`}
+                      style={{ animationDelay: `${index * 0.03}s` }}
+                    >
+                      <td className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(id)}
+                          className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs ${getAvatarColor(fullname || username)}`}>
+                            {getInitials(fullname || username)}
+                          </div>
+                          <span className="font-medium text-sm dark:text-white">{username}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-300 hidden md:table-cell">
+                        {fullname || '-'}
+                      </td>
+                      <td className="px-3 py-3 hidden sm:table-cell">
+                        {getRoleBadge(roleId, role)}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell">
+                        {user.email || '-'}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(status)}`}>
+                          {status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => viewUserDetail(user)}
+                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition group-hover:scale-110"
+                            title="View"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openEditModal(user)}
+                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition group-hover:scale-110"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(id)}
+                            className={`p-1.5 rounded-lg transition group-hover:scale-110 ${
+                              id === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                            }`}
+                            title={id === 1 ? 'Cannot delete admin' : 'Delete'}
+                            disabled={id === 1}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-            <div className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-              Total: {users.length} user(s)
-            </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* ===== FOOTER ===== */}
+      <div className="text-center text-xs text-gray-400 dark:text-gray-500 py-4 border-t border-gray-200 dark:border-gray-700">
+        <p className="flex items-center justify-center gap-4 flex-wrap">
+          <span>👥 {filteredUsers.length} users displayed</span>
+          <span>•</span>
+          <span>🛡️ {userStats.total} total users</span>
+          <span>•</span>
+          <span>✅ {userStats.active} active</span>
+          <span>•</span>
+          <span>👑 {userStats.admins} admins</span>
+          <span>•</span>
+          <span>💼 {userStats.cashiers} cashiers</span>
+          <span>•</span>
+          <span>{new Date().toLocaleString()}</span>
+        </p>
       </div>
 
-      {/* Modal */}
+      {/* ===== USER DETAIL MODAL ===== */}
+      {showDetailModal && selectedUserDetail && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
+                <Shield className="w-5 h-5 text-indigo-600" />
+                User Details
+              </h2>
+              <button 
+                onClick={() => setShowDetailModal(false)}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              {/* User Avatar */}
+              <div className="flex items-center gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl ${getAvatarColor(selectedUserDetail.fullname || selectedUserDetail.username)} shadow-lg`}>
+                  {getInitials(selectedUserDetail.fullname || selectedUserDetail.username)}
+                </div>
+                <div>
+                  <p className="text-lg font-bold dark:text-white">{selectedUserDetail.username}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{selectedUserDetail.fullname || 'No full name'}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {getRoleBadge(
+                      selectedUserDetail.role_id || (selectedUserDetail.role === 'Admin' ? 1 : selectedUserDetail.role === 'Cashier' ? 2 : 3),
+                      selectedUserDetail.role
+                    )}
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedUserDetail.status)}`}>
+                      {selectedUserDetail.status || 'ACTIVE'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Details */}
+              <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                <User className="w-4 h-4 text-indigo-500" />
+                Contact Information
+              </h3>
+              <div className="space-y-2 mb-6">
+                {selectedUserDetail.email && (
+                  <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                    <Mail className="w-4 h-4 text-blue-500" />
+                    <span className="text-sm dark:text-white">{selectedUserDetail.email}</span>
+                  </div>
+                )}
+                {selectedUserDetail.phone && (
+                  <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                    <Phone className="w-4 h-4 text-emerald-500" />
+                    <span className="text-sm dark:text-white">{selectedUserDetail.phone}</span>
+                  </div>
+                )}
+                {selectedUserDetail.created_at && (
+                  <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                    <Calendar className="w-4 h-4 text-purple-500" />
+                    <span className="text-sm dark:text-white">Joined: {formatDate(selectedUserDetail.created_at)}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                  <Key className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm dark:text-white">User ID: {selectedUserDetail.user_id}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button 
+                onClick={() => {
+                  setShowDetailModal(false);
+                  openEditModal(selectedUserDetail);
+                }}
+                className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium flex items-center gap-2"
+              >
+                <Edit2 className="w-4 h-4" />
+                Edit
+              </button>
+              <button 
+                onClick={() => setShowDetailModal(false)}
+                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ADD/EDIT MODAL ===== */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
               <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
                 <Shield className="w-5 h-5 text-indigo-600" />
                 {editingUser ? 'Edit User' : 'Add New User'}
               </h2>
               <button 
                 onClick={() => setShowModal(false)} 
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition"
+                disabled={submitting}
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-3">
+
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="space-y-4">
+                {/* Username */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Username *</label>
+                  <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                    Username <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
                     required
                     value={formData.username}
                     onChange={(e) => setFormData({...formData, username: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                     placeholder="Enter username"
+                    disabled={submitting}
                   />
                 </div>
+
+                {/* Full Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Full Name</label>
+                  <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                    <User className="w-4 h-4" />
+                    Full Name
+                  </label>
                   <input
                     type="text"
                     value={formData.fullname}
                     onChange={(e) => setFormData({...formData, fullname: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                     placeholder="Enter full name"
+                    disabled={submitting}
                   />
                 </div>
+
+                {/* Password */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                    <Lock className="w-4 h-4" />
                     {editingUser ? 'Password (leave blank to keep current)' : 'Password *'}
                   </label>
-                  <input
-                    type="password"
-                    required={!editingUser}
-                    value={formData.password}
-                    onChange={(e) => setFormData({...formData, password: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-                    placeholder={editingUser ? 'Leave blank to keep current' : 'Enter password'}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required={!editingUser}
+                      value={formData.password}
+                      onChange={(e) => setFormData({...formData, password: e.target.value})}
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition pr-10"
+                      placeholder={editingUser ? 'Leave blank to keep current' : 'Enter password (min 4 chars)'}
+                      disabled={submitting}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+                    >
+                      {showPassword ? <X className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
-                  <select
-                    value={formData.role_id}
-                    onChange={(e) => setFormData({...formData, role_id: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-                  >
-                    <option value="1">Admin</option>
-                    <option value="2">Cashier</option>
-                    <option value="3">Viewer</option>
-                  </select>
+
+                {/* Email & Phone */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                      <Mail className="w-4 h-4" />
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      placeholder="Enter email"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div>
+                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                      <Phone className="w-4 h-4" />
+                      Phone
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      placeholder="Enter phone"
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+
+                {/* Role & Status */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                      <Briefcase className="w-4 h-4" />
+                      Role
+                    </label>
+                    <select
+                      value={formData.role_id}
+                      onChange={(e) => setFormData({...formData, role_id: e.target.value})}
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      disabled={submitting}
+                    >
+                      <option value="1">Admin</option>
+                      <option value="2">Cashier</option>
+                      <option value="3">Viewer</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                      <UserCheck className="w-4 h-4" />
+                      Status
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({...formData, status: e.target.value})}
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      disabled={submitting}
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t dark:border-gray-700">
+
+              {/* Actions */}
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button 
                   type="button" 
                   onClick={() => setShowModal(false)} 
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition dark:text-white"
+                  className="px-6 py-2.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition dark:text-white font-medium disabled:opacity-50"
+                  disabled={submitting}
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2"
+                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  disabled={submitting}
                 >
-                  <Save className="w-4 h-4" />
-                  {editingUser ? 'Update' : 'Save'}
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {editingUser ? 'Update User' : 'Create User'}
+                    </>
+                  )}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* ===== CSS ANIMATIONS ===== */}
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideIn {
+          from { opacity: 0; transform: translateX(-20px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(100px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-10px); }
+        }
+
+        .animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; opacity: 0; }
+        .animate-slideIn { animation: slideIn 0.4s ease-out forwards; opacity: 0; }
+        .animate-slideInRight { animation: slideInRight 0.5s ease-out forwards; }
+        .animate-slideUp { animation: slideUp 0.4s ease-out forwards; opacity: 0; }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        .animate-pulse { animation: pulse 2s ease-in-out infinite; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #c4c4c4;
+          border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: #a0a0a0;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+          background: #4b5563;
+        }
+        .dark ::-webkit-scrollbar-thumb:hover {
+          background: #6b7280;
+        }
+      `}</style>
     </div>
   );
 };

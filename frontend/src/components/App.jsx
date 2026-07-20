@@ -11,6 +11,7 @@ import Reports from './components/Reports';
 import Layout from './components/Layout';
 import Warranty from './components/Warranty';
 
+
 function App() {
   const [user, setUser] = useState(null);
 

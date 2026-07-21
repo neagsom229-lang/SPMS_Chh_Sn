@@ -1,3 +1,27 @@
+require('dotenv').config();
+
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const dbModule = require("./config/database");
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// ============================================
+// CORS CONFIGURATION - Allow frontend
+// ============================================
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// ... rest of your server code
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");

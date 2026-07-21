@@ -14,137 +14,223 @@ import Warranty from './components/Warranty';
 import Layout from './components/Layout';
 import Analytics from './components/Analytics';
 import Payment from './components/Payment';
+import { ThemeProvider } from './context/ThemeContext';
+import Profile from './components/Profile';
 
 function App() {
   const [user, setUser] = useState(null);
 
+  // Protected route wrapper
+  const ProtectedRoute = ({ children }) => {
+    if (!user) {
+      return <Navigate to="/login" replace />;
+    }
+    return children;
+  };
+
   return (
-    <BrowserRouter
-     future={{
-    v7_startTransition: true,
-    v7_relativeSplatPath: true,
-  }}>
-      <Routes>
-        <Route path="/login" element={<Login setUser={setUser} />} />
-        <Route path="/" element={
-          user ? (
-            <Layout user={user}>
-              <Dashboard user={user} />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/dashboard" element={
-          user ? (
-            <Layout user={user}>
-              <Dashboard user={user} />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/orders" element={
-          user ? (
-            <Layout user={user}>
-              <Orders />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/products" element={
-          user ? (
-            <Layout user={user}>
-              <Products />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/customers" element={
-          user ? (
-            <Layout user={user}>
-              <Customers />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/stock" element={
-          user ? (
-            <Layout user={user}>
-              <Stock />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/suppliers" element={
-          user ? (
-            <Layout user={user}>
-              <Suppliers />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/reports" element={
-          user ? (
-            <Layout user={user}>
-              <Reports />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/users" element={
-          user ? (
-            <Layout user={user}>
-              <Users />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/activity" element={
-          user ? (
-            <Layout user={user}>
-              <ActivityLog />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/warranty" element={
-          user ? (
-            <Layout user={user}>
-              <Warranty />
-            </Layout>
-          ) : (
-            <Navigate to="/login" />
-          )
-        } />
-        <Route path="/analytics" element={
+    <ThemeProvider>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<Login setUser={setUser} />} />
+          
+          {/* Protected Routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Dashboard user={user} />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Dashboard user={user} />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Orders />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* ✅ FIXED: Order detail routes */}
+          <Route
+            path="/orders/:id"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Orders />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/orders/:id/process"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Orders />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/products"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Products />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/customers"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Customers />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/stock"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Stock />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/suppliers"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Suppliers />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Reports />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Users />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/activity"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <ActivityLog />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/warranty"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Warranty />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Analytics />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/payment/:orderId"
+            element={
+              <ProtectedRoute>
+                <Layout user={user}>
+                  <Payment />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/profile" element={
   user ? (
     <Layout user={user}>
-      <Analytics />
+      <Profile user={user} />
     </Layout>
   ) : (
     <Navigate to="/login" />
   )
 } />
-<Route path="/payment/:orderId" element={
-  user ? (
-    <Layout user={user}>
-      <Payment />
-    </Layout>
-  ) : (
-    <Navigate to="/login" />
-  )
-} />
-      </Routes>
-    </BrowserRouter>
+
+          
+          {/* Catch all - redirect to dashboard if logged in, else login */}
+          <Route
+            path="*"
+            element={
+              user ? (
+                <Navigate to="/dashboard" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

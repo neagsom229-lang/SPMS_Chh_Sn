@@ -3,26 +3,92 @@
 @tailwind utilities;
 
 /* ==========================================================
-   Dark Mode Styles
+   Base Styles
    ========================================================== */
 
 :root {
-  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1); /* smoother, less robotic than linear ease */
+  --ease-premium: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Smooth theme switch instead of an instant, jarring flip */
-body,
-.bg-white, .bg-gray-50, .bg-gray-100,
-.text-gray-400, .text-gray-500, .text-gray-600, .text-gray-700, .text-gray-800,
-.border-gray-100, .border-gray-200, .border-gray-300 {
-  transition: background-color 0.3s var(--ease-premium), color 0.3s var(--ease-premium),
-    border-color 0.3s var(--ease-premium);
+* {
+  transition: background-color 0.3s var(--ease-premium), 
+              color 0.3s var(--ease-premium),
+              border-color 0.3s var(--ease-premium),
+              box-shadow 0.3s var(--ease-premium);
 }
 
-.dark {
-  background-color: #111827;
-  color: #f3f4f6;
+html {
+  scroll-behavior: smooth;
 }
+
+body {
+  @apply bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==========================================================
+   Custom Components
+   ========================================================== */
+
+@layer components {
+  .card {
+    @apply bg-white dark:bg-gray-800 rounded-xl shadow-soft border border-gray-100 dark:border-gray-700/50 transition-all duration-200;
+  }
+  
+  .card-hover {
+    @apply hover:shadow-soft-md hover:-translate-y-1;
+  }
+  
+  .card-interactive {
+    @apply transition-all duration-200 hover:shadow-soft-md hover:-translate-y-0.5;
+  }
+  
+  .btn-primary {
+    @apply bg-brand-600 text-white px-4 py-2.5 rounded-xl hover:bg-brand-700 transition-all duration-200 font-medium shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-4 py-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200 font-medium;
+  }
+  
+  .btn-success {
+    @apply bg-success-500 text-white px-4 py-2.5 rounded-xl hover:bg-success-600 transition-all duration-200 font-medium shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  .btn-danger {
+    @apply bg-danger-500 text-white px-4 py-2.5 rounded-xl hover:bg-danger-600 transition-all duration-200 font-medium shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all duration-200;
+  }
+
+  .badge {
+    @apply px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400;
+  }
+
+  .badge-warning {
+    @apply bg-warning-100 dark:bg-warning-900/30 text-warning-700 dark:text-warning-400;
+  }
+
+  .badge-danger {
+    @apply bg-danger-100 dark:bg-danger-900/30 text-danger-700 dark:text-danger-400;
+  }
+
+  .badge-info {
+    @apply bg-info-100 dark:bg-info-900/30 text-info-700 dark:text-info-400;
+  }
+}
+
+/* ==========================================================
+   Dark Mode - FIXED (No circular dependencies)
+   ========================================================== */
 
 /* Backgrounds */
 .dark .bg-white {
@@ -47,7 +113,7 @@ body,
   border-color: #4b5563;
 }
 
-/* Text */
+/* Text Colors - Direct values instead of @apply */
 .dark .text-gray-400,
 .dark .text-gray-500 {
   color: #9ca3af;
@@ -82,11 +148,11 @@ body,
   color: #6b7280;
 }
 
-/* Shadows — tuned per theme instead of muddy on dark */
-.dark .shadow,
-.dark .shadow-sm,
-.dark .shadow-md,
-.dark .shadow-lg {
+/* Shadows */
+.dark .shadow-soft,
+.dark .shadow-soft-sm,
+.dark .shadow-soft-md,
+.dark .shadow-soft-lg {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
 }
 
@@ -98,77 +164,119 @@ body,
   color: #bfdbfe;
 }
 
-/* Accessible keyboard focus ring */
-:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px #3b82f6, 0 0 0 4px rgba(59, 130, 246, 0.25);
-}
-.dark :focus-visible {
-  box-shadow: 0 0 0 2px #60a5fa, 0 0 0 4px rgba(96, 165, 250, 0.3);
+/* ==========================================================
+   Scrollbar
+   ========================================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-/* Slim dark-mode scrollbars */
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
 .dark ::-webkit-scrollbar-track {
-  background: transparent;
+  background: #1f2937;
 }
+
 .dark ::-webkit-scrollbar-thumb {
-  background-color: #374151;
-  border-radius: 9999px;
+  background: #4b5563;
 }
+
 .dark ::-webkit-scrollbar-thumb:hover {
-  background-color: #4b5563;
+  background: #6b7280;
 }
 
 /* ==========================================================
-   Motion: page load + interactive feedback
+   Focus States
    ========================================================== */
 
-@keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #6366f1, 0 0 0 4px rgba(99, 102, 241, 0.25);
 }
 
-/* Attach .animate-page-in to your top-level page wrapper for a soft
-   entrance on route change instead of an instant pop-in */
-.animate-page-in {
-  animation: fade-in-up 0.35s var(--ease-premium) both;
+.dark :focus-visible {
+  box-shadow: 0 0 0 2px #818cf8, 0 0 0 4px rgba(99, 102, 241, 0.3);
 }
 
-/* Cards get a gentle lift on hover — attach .card-interactive to any
-   bg-white/bg-gray-800 panel that's clickable (table rows, list items) */
-.card-interactive {
-  transition: transform 0.25s var(--ease-premium), box-shadow 0.25s var(--ease-premium);
-}
-.card-interactive:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
-}
-.dark .card-interactive:hover {
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+/* ==========================================================
+   Animations
+   ========================================================== */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-/* Animated theme-toggle icon — attach .theme-toggle-icon to your
-   sun/moon button icon so it rotates in when the theme switches */
-.theme-toggle-icon {
-  transition: transform 0.4s var(--ease-premium);
-}
-.dark .theme-toggle-icon {
-  transform: rotate(180deg);
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* Buttons: subtle press feedback */
-button {
-  transition: transform 0.15s var(--ease-premium), background-color 0.2s ease, box-shadow 0.2s ease;
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-button:active {
-  transform: scale(0.97);
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
 }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes floatCard {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-4px) scale(1.01); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8) rotate(180deg); }
+}
+
+/* Animation Classes */
+.animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; }
+.animate-fadeInUp { animation: fadeInUp 0.5s ease-out forwards; }
+.animate-slideDown { animation: slideDown 0.3s ease-out forwards; }
+.animate-slideIn { animation: slideIn 0.4s ease-out forwards; opacity: 0; }
+.animate-slideUp { animation: slideUp 0.5s ease-out forwards; opacity: 0; }
+.animate-float { animation: float 3s ease-in-out infinite; }
+.animate-floatCard { animation: floatCard 4s ease-in-out infinite; }
+.animate-pulse { animation: pulse 2s ease-in-out infinite; }
+.animate-shimmer { animation: shimmer 3s linear infinite; background-size: 200% 100%; }
+.animate-sparkle { animation: sparkle 2s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -177,4 +285,118 @@ button:active {
   }
 }
 
-/* Rest of your styles */
+/* ==========================================================
+   Utility Classes
+   ========================================================== */
+
+.animation-delay-100 { animation-delay: 100ms; }
+.animation-delay-200 { animation-delay: 200ms; }
+.animation-delay-300 { animation-delay: 300ms; }
+.animation-delay-400 { animation-delay: 400ms; }
+.animation-delay-500 { animation-delay: 500ms; }
+
+/* Prevent text selection during interactions */
+.no-select {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Touch optimization */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+/* ==========================================================
+   Mobile Responsive Fixes
+   ========================================================== */
+
+/* Mobile-first adjustments */
+@media (max-width: 640px) {
+  /* Stats cards */
+  .stats-grid {
+    gap: 0.5rem;
+  }
+  
+  /* Charts container */
+  .charts-container {
+    padding: 0.5rem;
+  }
+  
+  /* Table container */
+  .table-container {
+    margin: 0 -0.5rem;
+    padding: 0 0.5rem;
+    overflow-x: auto;
+  }
+  
+  /* Modal */
+  .modal-content {
+    margin: 0.5rem;
+    padding: 1rem;
+    max-height: 95vh;
+  }
+  
+  /* Header */
+  .header-title {
+    font-size: 0.875rem;
+  }
+  
+  /* Buttons */
+  .btn-sm-mobile {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    min-height: 44px;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .stats-grid {
+    gap: 0.75rem;
+  }
+}
+
+/* Touch-friendly targets */
+button, 
+a,
+input,
+select {
+  min-height: 44px;
+}
+
+@media (min-width: 1024px) {
+  button, 
+  a,
+  input,
+  select {
+    min-height: auto;
+  }
+}
+
+/* Prevent horizontal scroll */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Better touch scrolling */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mobile font sizes */
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+  
+  h1 { font-size: 1.25rem; }
+  h2 { font-size: 1.125rem; }
+  h3 { font-size: 1rem; }
+  p { font-size: 0.875rem; }
+}
+
+/* Fix for mobile modals */
+@media (max-width: 640px) {
+  .fixed {
+    padding: 0.5rem !important;
+  }
+}

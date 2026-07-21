@@ -8,20 +8,41 @@ import {
   Filter, ArrowUp, ArrowDown, Grid3x3, List,
   Eye, Lock, Key, Phone, Mail, Calendar,
   Crown, Briefcase, UserCheck, UserX,
-  Loader2, AlertTriangle, ChevronRight
+  Loader2, AlertTriangle, ChevronRight,
+  Sparkles, Gift, Heart
 } from 'lucide-react';
 
 // ============================================
-// API CONFIGURATION
+// API CONFIGURATION - FIXED ✅
 // ============================================
-const API_URL = import.meta.env?.VITE_API_URL || '';
+const API_BASE = import.meta.env?.VITE_API_URL || '';
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// Add interceptors for debugging
+api.interceptors.request.use(
+  config => {
+    console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  response => {
+    console.log('📥 API Response:', response.status, response.config.url);
+    return response;
+  },
+  error => {
+    console.error('❌ API Error:', error.response?.status, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
 
 // ============================================
 // MAIN USERS COMPONENT
@@ -44,6 +65,7 @@ const Users = () => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedUserDetail, setSelectedUserDetail] = useState(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [userStats, setUserStats] = useState({
     total: 0,
     active: 0,
@@ -66,12 +88,23 @@ const Users = () => {
   // ===== REFS =====
   const isMounted = useRef(true);
   const searchTimeout = useRef(null);
+  const headerRef = useRef(null);
 
-  // ===== FETCH USERS =====
+  // ===== MOUSE TRACKING =====
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  // ===== FETCH USERS - FIXED ✅ =====
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/api/users', {
+      // ✅ FIXED: Removed '/api' prefix
+      const res = await api.get('/users', {
         params: { search: searchTerm || undefined }
       });
       if (isMounted.current) {
@@ -83,7 +116,6 @@ const Users = () => {
       console.error('Error fetching users:', error);
       if (isMounted.current) {
         showMessage('❌ Failed to load users', 'error');
-        // Fallback data
         const fallbackData = [
           { user_id: 1, username: 'admin', fullname: 'Administrator', role_id: 1, role: 'Admin', status: 'ACTIVE', email: 'admin@example.com', phone: '555-0001', created_at: '2026-01-01' },
           { user_id: 2, username: 'cashier1', fullname: 'John Doe', role_id: 2, role: 'Cashier', status: 'ACTIVE', email: 'john@example.com', phone: '555-0002', created_at: '2026-01-15' },
@@ -153,7 +185,6 @@ const Users = () => {
   const filteredUsers = useMemo(() => {
     let result = [...users];
 
-    // Role filter
     if (filterRole !== 'all') {
       const roleMap = {
         'admin': [1, 'Admin'],
@@ -167,7 +198,6 @@ const Users = () => {
       });
     }
 
-    // Status filter
     if (filterStatus !== 'all') {
       result = result.filter(u => {
         const status = (u.status || 'ACTIVE').toUpperCase();
@@ -175,7 +205,6 @@ const Users = () => {
       });
     }
 
-    // Sort
     result.sort((a, b) => {
       let aVal = a[sortBy] ?? '';
       let bVal = b[sortBy] ?? '';
@@ -193,7 +222,7 @@ const Users = () => {
     return result;
   }, [users, filterRole, filterStatus, sortBy, sortOrder]);
 
-  // ===== HANDLE SUBMIT =====
+  // ===== HANDLE SUBMIT - FIXED ✅ =====
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -226,10 +255,12 @@ const Users = () => {
       };
       
       if (editingUser) {
-        await api.put(`/api/users/${editingUser.user_id}`, submitData);
+        // ✅ FIXED: Removed '/api' prefix
+        await api.put(`/users/${editingUser.user_id}`, submitData);
         showMessage('✅ User updated successfully!');
       } else {
-        await api.post('/api/users', submitData);
+        // ✅ FIXED: Removed '/api' prefix
+        await api.post('/users', submitData);
         showMessage('✅ User created successfully!');
       }
       
@@ -245,7 +276,7 @@ const Users = () => {
     }
   };
 
-  // ===== HANDLE DELETE =====
+  // ===== HANDLE DELETE - FIXED ✅ =====
   const handleDelete = useCallback(async (id) => {
     if (id === 1) {
       showMessage('❌ Cannot delete the admin user', 'error');
@@ -254,7 +285,8 @@ const Users = () => {
     if (!window.confirm('Are you sure you want to delete this user?')) return;
     
     try {
-      await api.delete(`/api/users/${id}`);
+      // ✅ FIXED: Removed '/api' prefix
+      await api.delete(`/users/${id}`);
       showMessage('✅ User deleted successfully!');
       fetchUsers();
     } catch (error) {
@@ -263,7 +295,7 @@ const Users = () => {
     }
   }, [fetchUsers, showMessage]);
 
-  // ===== BULK DELETE =====
+  // ===== BULK DELETE - FIXED ✅ =====
   const handleBulkDelete = useCallback(async () => {
     if (selectedUsers.length === 0) return;
     if (selectedUsers.includes(1)) {
@@ -274,7 +306,8 @@ const Users = () => {
 
     try {
       for (const id of selectedUsers) {
-        await api.delete(`/api/users/${id}`);
+        // ✅ FIXED: Removed '/api' prefix
+        await api.delete(`/users/${id}`);
       }
       showMessage(`✅ ${selectedUsers.length} users deleted!`);
       setSelectedUsers([]);
@@ -352,7 +385,6 @@ const Users = () => {
 
   // ===== GET ROLE BADGE =====
   const getRoleBadge = useCallback((roleId, role) => {
-    // If role is a string (from Access), map it
     if (typeof role === 'string') {
       const roleMap = {
         'Admin': 1,
@@ -401,13 +433,24 @@ const Users = () => {
     const colors = [
       'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 
       'bg-blue-500', 'bg-green-500', 'bg-yellow-500',
-      'bg-red-500', 'bg-orange-500', 'bg-teal-500'
+      'bg-red-500', 'bg-orange-500', 'bg-teal-500',
+      'bg-cyan-500', 'bg-rose-500', 'bg-amber-500'
     ];
     let hash = 0;
     for (let i = 0; i < name.length; i++) {
       hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
     return colors[Math.abs(hash) % colors.length];
+  }, []);
+
+  // ===== GET USER EMOJI =====
+  const getUserEmoji = useCallback((role) => {
+    const emojis = {
+      'Admin': '👑',
+      'Cashier': '💼',
+      'Viewer': '👀'
+    };
+    return emojis[role] || '👤';
   }, []);
 
   // ===== GET INITIALS =====
@@ -458,14 +501,16 @@ const Users = () => {
   return (
     <div className="space-y-4 p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen">
       
-      {/* ===== MESSAGE TOAST ===== */}
+      {/* ===== MESSAGE TOAST - FIXED ✅ ===== */}
       {message && (
         <div className={`fixed top-4 right-4 z-50 max-w-md w-full p-4 rounded-xl shadow-2xl border transform transition-all duration-500 animate-slideInRight ${
           messageType === 'success' 
             ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' 
             : messageType === 'error'
             ? 'bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
-            : 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+            : messageType === 'warning'
+            ? 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+            : 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
         }`}>
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 mt-0.5">
@@ -481,30 +526,49 @@ const Users = () => {
         </div>
       )}
 
-      {/* ===== HEADER WITH STATS ===== */}
-      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl">
-        <div className="flex flex-wrap justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-3">
+      {/* ===== HEADER WITH STATS - 3D Tilt ===== */}
+      <div 
+        ref={headerRef}
+        className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden transition-all duration-300"
+        style={{
+          transform: `perspective(1000px) rotateX(${(mousePosition.y / window.innerHeight - 0.5) * 2}deg) rotateY(${(mousePosition.x / window.innerWidth - 0.5) * 2}deg)`,
+          transition: 'transform 0.1s ease-out'
+        }}
+      >
+        {/* Animated Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full animate-pulse-slow" />
+          <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-purple-300/20 rounded-full animate-pulse-slow animation-delay-1000" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-white/5 rounded-full animate-spin-slow" />
+          <div className="absolute top-10 right-20 text-4xl animate-float-delayed opacity-20">✦</div>
+        </div>
+
+        <div className="relative z-10 flex flex-wrap justify-between items-center">
+          <div className="animate-fadeInUp">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-medium text-white/80 tracking-wider uppercase">User Management</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3">
               <Shield className="w-8 h-8" />
               User Management
             </h1>
             <p className="text-indigo-100 mt-1 text-sm">Manage system users and their permissions</p>
           </div>
           <div className="flex items-center gap-3 mt-3 sm:mt-0">
-            <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl text-sm flex items-center gap-2">
-              <Clock className="w-4 h-4" />
+            <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl text-sm flex items-center gap-2 border border-white/10 animate-pulse-slow">
+              <Clock className="w-4 h-4 text-white/80" />
               {new Date().toLocaleTimeString()}
             </div>
             <button 
               onClick={handleRefresh}
-              className="bg-white/20 backdrop-blur-sm p-2 rounded-xl hover:bg-white/30 transition"
+              className="bg-white/20 backdrop-blur-sm p-2 rounded-xl hover:bg-white/30 transition hover:scale-110 duration-300"
             >
               <RefreshCw className="w-5 h-5" />
             </button>
             <button
               onClick={openAddModal}
-              className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl hover:bg-white/30 transition flex items-center gap-2"
+              className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl hover:bg-white/30 transition hover:scale-105 duration-300 flex items-center gap-2 border border-white/10"
             >
               <Plus className="w-4 h-4" />
               Add User
@@ -513,14 +577,14 @@ const Users = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 relative z-10">
           {[
             { label: 'Total Users', value: userStats.total, icon: 'total' },
             { label: 'Active', value: userStats.active, icon: 'active' },
             { label: 'Admins', value: userStats.admins, icon: 'admins' },
             { label: 'Cashiers', value: userStats.cashiers, icon: 'cashiers' }
           ].map((stat, index) => (
-            <div key={index} className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition animate-slideUp" style={{ animationDelay: `${index * 0.1}s` }}>
+            <div key={index} className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition-all duration-300 hover:scale-105 animate-slideUp border border-white/5" style={{ animationDelay: `${index * 0.1}s` }}>
               <div className="flex items-center gap-2">
                 {getStatIcon(stat.icon)}
                 <p className="text-xs text-indigo-200">{stat.label}</p>
@@ -532,18 +596,18 @@ const Users = () => {
       </div>
 
       {/* ===== CONTROLS ===== */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 hover:shadow-md transition-all duration-300">
         <div className="flex flex-wrap justify-between items-center gap-3">
           <div className="flex flex-wrap items-center gap-3 flex-1">
             {/* Search */}
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <div className="relative flex-1 min-w-[200px] group">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-indigo-500 transition-colors w-4 h-4" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="🔍 Search by username, name, email..."
-                className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
               />
             </div>
 
@@ -551,7 +615,7 @@ const Users = () => {
             <select
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
-              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 hover:border-indigo-300"
             >
               <option value="all">All Roles</option>
               <option value="admin">Admin</option>
@@ -563,7 +627,7 @@ const Users = () => {
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 hover:border-indigo-300"
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -584,7 +648,7 @@ const Users = () => {
               </select>
               <button
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600 transition"
+                className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600 transition-all duration-300 hover:scale-110"
               >
                 {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4 text-gray-500" /> : <ArrowDown className="w-4 h-4 text-gray-500" />}
               </button>
@@ -596,17 +660,25 @@ const Users = () => {
             <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-lg transition ${viewMode === 'grid' ? 'bg-white dark:bg-gray-600 shadow-sm' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                className={`p-1.5 rounded-lg transition-all duration-300 hover:scale-110 ${
+                  viewMode === 'grid' 
+                    ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600' 
+                    : 'hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300'
+                }`}
                 title="Grid view"
               >
-                <Grid3x3 className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                <Grid3x3 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded-lg transition ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 shadow-sm' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                className={`p-1.5 rounded-lg transition-all duration-300 hover:scale-110 ${
+                  viewMode === 'list' 
+                    ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600' 
+                    : 'hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300'
+                }`}
                 title="List view"
               >
-                <List className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                <List className="w-4 h-4" />
               </button>
             </div>
 
@@ -614,7 +686,7 @@ const Users = () => {
             {selectedUsers.length > 0 && (
               <button
                 onClick={handleBulkDelete}
-                className="px-3 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition flex items-center gap-2 text-sm"
+                className="px-3 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all duration-300 hover:scale-105 flex items-center gap-2 text-sm shadow-lg shadow-red-600/20"
               >
                 <Trash2 className="w-4 h-4" />
                 Delete ({selectedUsers.length})
@@ -626,7 +698,7 @@ const Users = () => {
 
       {/* ===== USERS GRID ===== */}
       {filteredUsers.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-12 text-center hover:shadow-lg transition-all duration-300">
           <Shield className="w-20 h-20 mx-auto text-gray-300 dark:text-gray-600 mb-4 animate-float" />
           <h3 className="text-xl font-medium text-gray-600 dark:text-gray-400">No users found</h3>
           <p className="text-gray-400 dark:text-gray-500 mt-2">
@@ -634,7 +706,7 @@ const Users = () => {
           </p>
           <button
             onClick={openAddModal}
-            className="mt-4 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium"
+            className="mt-4 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 hover:scale-105 font-medium"
           >
             <Plus className="w-4 h-4 inline mr-2" />
             Add User
@@ -653,11 +725,12 @@ const Users = () => {
             const initials = getInitials(fullname || username);
             const avatarColor = getAvatarColor(fullname || username);
             const isSelected = selectedUsers.includes(id);
+            const emoji = getUserEmoji(role);
 
             return (
               <div
                 key={id}
-                className={`bg-white dark:bg-gray-800 rounded-2xl shadow-sm border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group animate-fadeIn cursor-pointer ${
+                className={`bg-white dark:bg-gray-800 rounded-2xl shadow-sm border-2 transition-all duration-500 hover:shadow-xl hover:-translate-y-2 group animate-fadeIn cursor-pointer ${
                   isSelected ? 'border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30' : 'border-gray-100 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700'
                 }`}
                 style={{ animationDelay: `${index * 0.05}s` }}
@@ -667,14 +740,16 @@ const Users = () => {
                   {/* Header */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-lg ${avatarColor} shadow-lg relative`}>
-                        {initials}
+                      <div className="relative">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl ${avatarColor} shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:rotate-6`}>
+                          {emoji}
+                        </div>
                         <div className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-gray-800 ${
-                          status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-red-500'
+                          status === 'ACTIVE' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
                         }`} />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="font-semibold text-gray-800 dark:text-white truncate max-w-[120px]">
+                        <h3 className="font-semibold text-gray-800 dark:text-white truncate max-w-[120px] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                           {username}
                         </h3>
                         {fullname && (
@@ -691,7 +766,7 @@ const Users = () => {
                           e.stopPropagation();
                           viewUserDetail(user);
                         }}
-                        className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition opacity-0 group-hover:opacity-100"
+                        className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110"
                         title="View details"
                       >
                         <Eye className="w-4 h-4" />
@@ -701,7 +776,7 @@ const Users = () => {
                           e.stopPropagation();
                           openEditModal(user);
                         }}
-                        className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition opacity-0 group-hover:opacity-100"
+                        className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110"
                         title="Edit"
                       >
                         <Edit2 className="w-4 h-4" />
@@ -711,7 +786,7 @@ const Users = () => {
                           e.stopPropagation();
                           handleDelete(id);
                         }}
-                        className={`p-1.5 rounded-lg transition opacity-0 group-hover:opacity-100 ${
+                        className={`p-1.5 rounded-lg transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110 ${
                           id === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
                         }`}
                         title={id === 1 ? 'Cannot delete admin' : 'Delete'}
@@ -725,7 +800,7 @@ const Users = () => {
                   {/* Role & Status */}
                   <div className="flex items-center gap-2 mb-3">
                     {getRoleBadge(roleId, role)}
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(status)}`}>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all duration-300 ${getStatusBadge(status)} group-hover:scale-105`}>
                       {status}
                     </span>
                   </div>
@@ -733,13 +808,13 @@ const Users = () => {
                   {/* Contact Info */}
                   <div className="space-y-1.5">
                     {user.email && (
-                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2 truncate">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                         <Mail className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
                         <span className="truncate">{user.email}</span>
                       </p>
                     )}
                     {user.phone && (
-                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                         <Phone className="w-3.5 h-3.5 text-emerald-500" />
                         {user.phone}
                       </p>
@@ -748,6 +823,11 @@ const Users = () => {
                       <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-2">
                         <Calendar className="w-3.5 h-3.5" />
                         Joined {formatDate(user.created_at)}
+                      </p>
+                    )}
+                    {!user.email && !user.phone && !user.created_at && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+                        No additional information
                       </p>
                     )}
                   </div>
@@ -770,7 +850,7 @@ const Users = () => {
         </div>
       ) : (
         // ===== LIST VIEW =====
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-all duration-300">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50">
@@ -800,11 +880,14 @@ const Users = () => {
                   const roleId = user.role_id || (role === 'Admin' ? 1 : role === 'Cashier' ? 2 : 3);
                   const status = user.status || 'ACTIVE';
                   const isSelected = selectedUsers.includes(id);
+                  const emoji = getUserEmoji(role);
 
                   return (
                     <tr 
                       key={id} 
-                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition group animate-slideIn ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/10' : ''}`}
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-all duration-300 group animate-slideIn ${
+                        isSelected ? 'bg-indigo-50 dark:bg-indigo-900/10' : ''
+                      }`}
                       style={{ animationDelay: `${index * 0.03}s` }}
                     >
                       <td className="px-3 py-3">
@@ -817,10 +900,10 @@ const Users = () => {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs ${getAvatarColor(fullname || username)}`}>
-                            {getInitials(fullname || username)}
-                          </div>
-                          <span className="font-medium text-sm dark:text-white">{username}</span>
+                          <span className="text-xl">{emoji}</span>
+                          <span className="font-medium text-sm dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {username}
+                          </span>
                         </div>
                       </td>
                       <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-300 hidden md:table-cell">
@@ -833,7 +916,7 @@ const Users = () => {
                         {user.email || '-'}
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(status)}`}>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all duration-300 ${getStatusBadge(status)} group-hover:scale-105`}>
                           {status}
                         </span>
                       </td>
@@ -841,21 +924,21 @@ const Users = () => {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => viewUserDetail(user)}
-                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition group-hover:scale-110"
+                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-300 group-hover:scale-110"
                             title="View"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => openEditModal(user)}
-                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition group-hover:scale-110"
+                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-300 group-hover:scale-110"
                             title="Edit"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDelete(id)}
-                            className={`p-1.5 rounded-lg transition group-hover:scale-110 ${
+                            className={`p-1.5 rounded-lg transition-all duration-300 group-hover:scale-110 ${
                               id === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
                             }`}
                             title={id === 1 ? 'Cannot delete admin' : 'Delete'}
@@ -902,7 +985,7 @@ const Users = () => {
               </h2>
               <button 
                 onClick={() => setShowDetailModal(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-300 hover:rotate-90"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
@@ -966,14 +1049,14 @@ const Users = () => {
                   setShowDetailModal(false);
                   openEditModal(selectedUserDetail);
                 }}
-                className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium flex items-center gap-2"
+                className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all duration-300 hover:scale-105 font-medium flex items-center gap-2"
               >
                 <Edit2 className="w-4 h-4" />
                 Edit
               </button>
               <button 
                 onClick={() => setShowDetailModal(false)}
-                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium"
+                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 hover:scale-105 font-medium"
               >
                 Close
               </button>
@@ -988,12 +1071,12 @@ const Users = () => {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp">
             <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
               <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
-                <Shield className="w-5 h-5 text-indigo-600" />
+                <Shield className="w-5 h-5 text-indigo-600 animate-bounce" />
                 {editingUser ? 'Edit User' : 'Add New User'}
               </h2>
               <button 
                 onClick={() => setShowModal(false)} 
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-300 hover:rotate-90"
                 disabled={submitting}
               >
                 <X className="w-5 h-5 text-gray-500" />
@@ -1003,8 +1086,8 @@ const Users = () => {
             <form onSubmit={handleSubmit} className="p-6">
               <div className="space-y-4">
                 {/* Username */}
-                <div>
-                  <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                <div className="group">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                     Username <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -1012,15 +1095,15 @@ const Users = () => {
                     required
                     value={formData.username}
                     onChange={(e) => setFormData({...formData, username: e.target.value})}
-                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
                     placeholder="Enter username"
                     disabled={submitting}
                   />
                 </div>
 
                 {/* Full Name */}
-                <div>
-                  <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                <div className="group">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                     <User className="w-4 h-4" />
                     Full Name
                   </label>
@@ -1028,15 +1111,15 @@ const Users = () => {
                     type="text"
                     value={formData.fullname}
                     onChange={(e) => setFormData({...formData, fullname: e.target.value})}
-                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
                     placeholder="Enter full name"
                     disabled={submitting}
                   />
                 </div>
 
                 {/* Password */}
-                <div>
-                  <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                <div className="group">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                     <Lock className="w-4 h-4" />
                     {editingUser ? 'Password (leave blank to keep current)' : 'Password *'}
                   </label>
@@ -1046,14 +1129,14 @@ const Users = () => {
                       required={!editingUser}
                       value={formData.password}
                       onChange={(e) => setFormData({...formData, password: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition pr-10"
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300 pr-10"
                       placeholder={editingUser ? 'Leave blank to keep current' : 'Enter password (min 4 chars)'}
                       disabled={submitting}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-all duration-300"
                     >
                       {showPassword ? <X className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -1062,8 +1145,8 @@ const Users = () => {
 
                 {/* Email & Phone */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                  <div className="group">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                       <Mail className="w-4 h-4" />
                       Email
                     </label>
@@ -1071,13 +1154,13 @@ const Users = () => {
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
                       placeholder="Enter email"
                       disabled={submitting}
                     />
                   </div>
-                  <div>
-                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                  <div className="group">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                       <Phone className="w-4 h-4" />
                       Phone
                     </label>
@@ -1085,7 +1168,7 @@ const Users = () => {
                       type="tel"
                       value={formData.phone}
                       onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
                       placeholder="Enter phone"
                       disabled={submitting}
                     />
@@ -1094,15 +1177,15 @@ const Users = () => {
 
                 {/* Role & Status */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                  <div className="group">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                       <Briefcase className="w-4 h-4" />
                       Role
                     </label>
                     <select
                       value={formData.role_id}
                       onChange={(e) => setFormData({...formData, role_id: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
                       disabled={submitting}
                     >
                       <option value="1">Admin</option>
@@ -1110,15 +1193,15 @@ const Users = () => {
                       <option value="3">Viewer</option>
                     </select>
                   </div>
-                  <div>
-                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                  <div className="group">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                       <UserCheck className="w-4 h-4" />
                       Status
                     </label>
                     <select
                       value={formData.status}
                       onChange={(e) => setFormData({...formData, status: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
                       disabled={submitting}
                     >
                       <option value="ACTIVE">Active</option>
@@ -1133,14 +1216,14 @@ const Users = () => {
                 <button 
                   type="button" 
                   onClick={() => setShowModal(false)} 
-                  className="px-6 py-2.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition dark:text-white font-medium disabled:opacity-50"
+                  className="px-6 py-2.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-300 dark:text-white font-medium disabled:opacity-50"
                   disabled={submitting}
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 hover:scale-105 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   disabled={submitting}
                 >
                   {submitting ? (
@@ -1183,13 +1266,29 @@ const Users = () => {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-10px); }
         }
+        @keyframes float-delayed {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-15px) rotate(10deg); }
+        }
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 0.2; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(1.1); }
+        }
+        @keyframes spin-slow {
+          0% { transform: translate(-50%, -50%) rotate(0deg); }
+          100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
 
         .animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; opacity: 0; }
         .animate-slideIn { animation: slideIn 0.4s ease-out forwards; opacity: 0; }
         .animate-slideInRight { animation: slideInRight 0.5s ease-out forwards; }
         .animate-slideUp { animation: slideUp 0.4s ease-out forwards; opacity: 0; }
         .animate-float { animation: float 3s ease-in-out infinite; }
-        .animate-pulse { animation: pulse 2s ease-in-out infinite; }
+        .animate-float-delayed { animation: float-delayed 4s ease-in-out infinite; }
+        .animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
+        .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+        .animate-bounce { animation: bounce 1s ease-in-out infinite; }
+        .animation-delay-1000 { animation-delay: 1s; }
 
         /* Scrollbar */
         ::-webkit-scrollbar {

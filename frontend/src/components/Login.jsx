@@ -21,16 +21,33 @@ import {
 } from 'lucide-react';
 
 // ============================================
-// API CONFIGURATION
+// API CONFIGURATION - FIXED
 // ============================================
-const API_URL = import.meta.env?.VITE_API_URL || '';
+// Use relative URLs - Vite proxy handles forwarding
 const api = axios.create({
-  baseURL: API_URL,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// For production (Render), use absolute URL
+const API_BASE = import.meta.env?.VITE_API_URL || '';
+
+// If API_BASE is set, use it; otherwise use relative URLs
+if (API_BASE) {
+  api.defaults.baseURL = API_BASE;
+}
+
+// Add request interceptor for debugging
+api.interceptors.request.use(
+  config => {
+    console.log('📤 Login Request:', config.method?.toUpperCase(), config.url);
+    console.log('📤 Full URL:', config.baseURL + config.url);
+    return config;
+  },
+  error => Promise.reject(error)
+);
 
 // ============================================
 // LOGIN COMPONENT
@@ -110,7 +127,8 @@ const Login = ({ setUser }) => {
     setLoading(true);
 
     try {
-      const response = await api.post('/api/auth/login', { username, password });
+      // ✅ FIXED: Removed '/api' prefix - just use '/auth/login'
+      const response = await api.post('/auth/login', { username, password });
       console.log('✅ Login response:', response.data);
       
       if (rememberMe) {
@@ -267,8 +285,8 @@ const Login = ({ setUser }) => {
             </div>
           )}
 
-          {/* Success Message */}
-          {!error && loading && (
+          {/* Loading Message */}
+          {loading && (
             <div className="bg-emerald-500/20 backdrop-blur-sm text-emerald-200 p-3 rounded-xl mb-4 text-sm border border-emerald-500/30 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>Authenticating...</span>
@@ -300,7 +318,7 @@ const Login = ({ setUser }) => {
 
             {/* Password */}
             <div>
-              <label className=" text-sm font-medium text-indigo-200 mb-1.5 flex items-center gap-2">
+              <label className="text-sm font-medium text-indigo-200 mb-1.5 flex items-center gap-2">
                 <Lock className="w-4 h-4" />
                 Password
               </label>
@@ -377,7 +395,6 @@ const Login = ({ setUser }) => {
               <div className="flex items-center gap-1">
                 <Shield className="w-3 h-3" />
               </div>
-  
             </div>
             <p className="text-[10px] text-indigo-300/30">
               Default credentials: <span className="font-medium text-indigo-300/50">admin / admin123</span>

@@ -7,21 +7,42 @@ import {
   CreditCard, Wallet, Zap, Check, AlertTriangle,
   BarChart3, TrendingUp, Clock, DollarSign,
   ChevronRight, Filter, Grid3x3, LayoutGrid,
-  ArrowUp, ArrowDown, Star, Award, Gift
+  ArrowUp, ArrowDown, Star, Award, Gift,
+  Sparkles, Shield, Truck
 } from 'lucide-react';
 import { exportInvoicePDF } from '../utils/pdfExport';
 
 // ============================================
-// API CONFIGURATION
+// API CONFIGURATION - FIXED ✅
 // ============================================
-const API_URL = import.meta.env?.VITE_API_URL || '';
+const API_BASE = import.meta.env?.VITE_API_URL || '';
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// Add interceptors for debugging
+api.interceptors.request.use(
+  config => {
+    console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  response => {
+    console.log('📥 API Response:', response.status, response.config.url);
+    return response;
+  },
+  error => {
+    console.error('❌ API Error:', error.response?.status, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
 
 // ============================================
 // MAIN ORDERS COMPONENT
@@ -43,6 +64,7 @@ const Orders = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [savedOrderData, setSavedOrderData] = useState(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   
   // ===== PURCHASE STATE =====
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -62,6 +84,16 @@ const Orders = () => {
   // ===== REFS =====
   const isMounted = useRef(true);
   const itemsEndRef = useRef(null);
+  const headerRef = useRef(null);
+
+  // ===== MOUSE TRACKING =====
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   // ===== LOAD SAVED ORDERS FROM LOCALSTORAGE =====
   const loadSavedOrders = useCallback(() => {
@@ -69,7 +101,6 @@ const Orders = () => {
       const saved = JSON.parse(localStorage.getItem('orders') || '[]');
       setSavedOrders(saved);
       
-      // Calculate stats
       const stats = {
         total: saved.length,
         pending: saved.filter(o => o.status === 'Pending' || o.status === 'Processing').length,
@@ -83,10 +114,11 @@ const Orders = () => {
     }
   }, []);
 
-  // ===== FETCH CUSTOMERS =====
+  // ===== FETCH CUSTOMERS - FIXED ✅ =====
   const fetchCustomers = useCallback(async () => {
     try {
-      const res = await api.get('/api/customers', { timeout: 10000 });
+      // ✅ FIXED: Removed '/api' prefix
+      const res = await api.get('/customers', { timeout: 10000 });
       if (isMounted.current) {
         setCustomers(res.data || []);
       }
@@ -94,20 +126,21 @@ const Orders = () => {
       console.error('❌ Error fetching customers:', error.message);
       if (isMounted.current) {
         setCustomers([
-          { CUS_ID: '1', FIRST_NAME: 'John', LAST_NAME: 'Doe', PHONE: '555-0101', EMAIL: 'john@example.com' },
-          { CUS_ID: '2', FIRST_NAME: 'Jane', LAST_NAME: 'Smith', PHONE: '555-0102', EMAIL: 'jane@example.com' },
-          { CUS_ID: '3', FIRST_NAME: 'Robert', LAST_NAME: 'Johnson', PHONE: '555-0103', EMAIL: 'robert@example.com' },
-          { CUS_ID: '4', FIRST_NAME: 'Mary', LAST_NAME: 'Williams', PHONE: '555-0104', EMAIL: 'mary@example.com' },
-          { CUS_ID: '5', FIRST_NAME: 'David', LAST_NAME: 'Brown', PHONE: '555-0105', EMAIL: 'david@example.com' },
+          { CUS_ID: 'CUS001', FIRST_NAME: 'John', LAST_NAME: 'Doe', PHONE: '555-0101', EMAIL: 'john@example.com' },
+          { CUS_ID: 'CUS002', FIRST_NAME: 'Jane', LAST_NAME: 'Smith', PHONE: '555-0102', EMAIL: 'jane@example.com' },
+          { CUS_ID: 'CUS003', FIRST_NAME: 'Robert', LAST_NAME: 'Johnson', PHONE: '555-0103', EMAIL: 'robert@example.com' },
+          { CUS_ID: 'CUS004', FIRST_NAME: 'Mary', LAST_NAME: 'Williams', PHONE: '555-0104', EMAIL: 'mary@example.com' },
+          { CUS_ID: 'CUS005', FIRST_NAME: 'David', LAST_NAME: 'Brown', PHONE: '555-0105', EMAIL: 'david@example.com' },
         ]);
       }
     }
   }, []);
 
-  // ===== FETCH PRODUCTS =====
+  // ===== FETCH PRODUCTS - FIXED ✅ =====
   const fetchProducts = useCallback(async () => {
     try {
-      const res = await api.get('/api/products', { timeout: 10000 });
+      // ✅ FIXED: Removed '/api' prefix
+      const res = await api.get('/products', { timeout: 10000 });
       if (isMounted.current) {
         setProducts(res.data || []);
       }
@@ -115,14 +148,14 @@ const Orders = () => {
       console.error('❌ Error fetching products:', error.message);
       if (isMounted.current) {
         setProducts([
-          { PRODUCT_ID: '1', NAME_EN: 'Laptop Pro', NAME_KH: 'កុំព្យូទ័រយួរដៃ', SALEOUT_PRICE: 1299.99, STOCK: 50 },
-          { PRODUCT_ID: '2', NAME_EN: 'Smartphone X', NAME_KH: 'ទូរស័ព្ទឆ្លាត', SALEOUT_PRICE: 899.99, STOCK: 30 },
-          { PRODUCT_ID: '3', NAME_EN: 'Tablet Plus', NAME_KH: 'ថេប្លេត', SALEOUT_PRICE: 499.99, STOCK: 20 },
-          { PRODUCT_ID: '4', NAME_EN: 'Wireless Mouse', NAME_KH: 'កណ្ដុរឥតខ្សែ', SALEOUT_PRICE: 29.99, STOCK: 100 },
-          { PRODUCT_ID: '5', NAME_EN: 'Keyboard Pro', NAME_KH: 'ក្ដារចុច', SALEOUT_PRICE: 79.99, STOCK: 45 },
-          { PRODUCT_ID: '6', NAME_EN: 'USB-C Hub', NAME_KH: 'Hub USB-C', SALEOUT_PRICE: 49.99, STOCK: 60 },
-          { PRODUCT_ID: '7', NAME_EN: 'Monitor Stand', NAME_KH: 'ជើងម៉ូនីទ័', SALEOUT_PRICE: 34.99, STOCK: 35 },
-          { PRODUCT_ID: '8', NAME_EN: 'Laptop Bag', NAME_KH: 'កាបូបកុំព្យូទ័រ', SALEOUT_PRICE: 24.99, STOCK: 25 },
+          { PRODUCT_ID: 'PROD001', NAME_EN: 'Laptop Pro', NAME_KH: 'កុំព្យូទ័រយួរដៃ', SALEOUT_PRICE: 1299.99, STOCK: 50 },
+          { PRODUCT_ID: 'PROD002', NAME_EN: 'Smartphone X', NAME_KH: 'ទូរស័ព្ទឆ្លាត', SALEOUT_PRICE: 899.99, STOCK: 30 },
+          { PRODUCT_ID: 'PROD003', NAME_EN: 'Tablet Plus', NAME_KH: 'ថេប្លេត', SALEOUT_PRICE: 499.99, STOCK: 20 },
+          { PRODUCT_ID: 'PROD004', NAME_EN: 'Wireless Mouse', NAME_KH: 'កណ្ដុរឥតខ្សែ', SALEOUT_PRICE: 29.99, STOCK: 100 },
+          { PRODUCT_ID: 'PROD005', NAME_EN: 'Keyboard Pro', NAME_KH: 'ក្ដារចុច', SALEOUT_PRICE: 79.99, STOCK: 45 },
+          { PRODUCT_ID: 'PROD006', NAME_EN: 'USB-C Hub', NAME_KH: 'Hub USB-C', SALEOUT_PRICE: 49.99, STOCK: 60 },
+          { PRODUCT_ID: 'PROD007', NAME_EN: 'Monitor Stand', NAME_KH: 'ជើងម៉ូនីទ័', SALEOUT_PRICE: 34.99, STOCK: 35 },
+          { PRODUCT_ID: 'PROD008', NAME_EN: 'Laptop Bag', NAME_KH: 'កាបូបកុំព្យូទ័រ', SALEOUT_PRICE: 24.99, STOCK: 25 },
         ]);
       }
     }
@@ -223,7 +256,7 @@ const Orders = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // ===== CHECK STOCK AVAILABILITY =====
+  // ===== CHECK STOCK AVAILABILITY - FIXED ✅ =====
   const checkStockAvailability = useCallback(async () => {
     let hasStockIssue = false;
     let stockMessages = [];
@@ -232,7 +265,8 @@ const Orders = () => {
       if (!item.product_id) continue;
       
       try {
-        const res = await api.get(`/api/stock/product/${item.product_id}`, { timeout: 5000 });
+        // ✅ FIXED: Removed '/api' prefix
+        const res = await api.get(`/stock/product/${item.product_id}`, { timeout: 5000 });
         const available = res.data?.QtyAvailable || 0;
         
         if (available < item.qty) {
@@ -251,7 +285,7 @@ const Orders = () => {
     return { hasStockIssue, stockMessages };
   }, [items]);
 
-  // ===== PROCESS PURCHASE =====
+  // ===== PROCESS PURCHASE - FIXED ✅ =====
   const handlePurchase = useCallback(async () => {
     if (!selectedCustomer) {
       showMessage('❌ Please select a customer', 'error');
@@ -309,7 +343,8 @@ const Orders = () => {
 
       let response;
       try {
-        response = await api.post('/api/purchase', purchaseData);
+        // ✅ FIXED: Removed '/api' prefix
+        response = await api.post('/purchase', purchaseData);
       } catch (apiError) {
         console.warn('⚠️ API purchase failed, using local storage:', apiError.response?.data || apiError.message);
         
@@ -585,6 +620,16 @@ const Orders = () => {
     });
   }, [products, searchTerm]);
 
+  // ===== GET PRODUCT EMOJI =====
+  const getProductEmoji = (name) => {
+    const emojis = ['📱', '💻', '⌨️', '🖥️', '📷', '🎧', '⌚', '📡', '🔋', '💾', '🖱️', '📀', '💿', '📹', '🎮', '📺', '🔊'];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return emojis[Math.abs(hash) % emojis.length];
+  };
+
   // ===== FORMAT DATE =====
   const formatDate = (dateStr) => {
     try {
@@ -626,7 +671,7 @@ const Orders = () => {
   return (
     <div className="space-y-4 p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen">
       
-      {/* ===== MESSAGE TOAST WITH ANIMATION ===== */}
+      {/* ===== MESSAGE TOAST ===== */}
       {message && (
         <div className={`fixed top-4 right-4 z-50 max-w-md w-full p-4 rounded-xl shadow-2xl border transform transition-all duration-500 animate-slideInRight ${
           messageType === 'success' 
@@ -652,25 +697,43 @@ const Orders = () => {
         </div>
       )}
 
-      {/* ===== HEADER WITH STATS ===== */}
-      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl">
-        <div className="flex flex-wrap justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-3">
+      {/* ===== HEADER WITH STATS - 3D Tilt ===== */}
+      <div 
+        ref={headerRef}
+        className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden transition-all duration-300"
+        style={{
+          transform: `perspective(1000px) rotateX(${(mousePosition.y / window.innerHeight - 0.5) * 2}deg) rotateY(${(mousePosition.x / window.innerWidth - 0.5) * 2}deg)`,
+          transition: 'transform 0.1s ease-out'
+        }}
+      >
+        {/* Animated Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full animate-pulse-slow" />
+          <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-purple-300/20 rounded-full animate-pulse-slow animation-delay-1000" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-white/5 rounded-full animate-spin-slow" />
+        </div>
+
+        <div className="relative z-10 flex flex-wrap justify-between items-center">
+          <div className="animate-fadeInUp">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-medium text-white/80 tracking-wider uppercase">Order Management</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3">
               <ShoppingCart className="w-8 h-8" />
               Orders Management
             </h1>
             <p className="text-indigo-100 mt-1 text-sm">Create and manage customer orders</p>
           </div>
           <div className="flex items-center gap-3 mt-3 sm:mt-0">
-            <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl text-sm flex items-center gap-2">
-              <Clock className="w-4 h-4" />
+            <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl text-sm flex items-center gap-2 border border-white/10 animate-pulse-slow">
+              <Clock className="w-4 h-4 text-white/80" />
               {new Date().toLocaleTimeString()}
             </div>
             <button 
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="bg-white/20 backdrop-blur-sm p-2 rounded-xl hover:bg-white/30 transition"
+              className="bg-white/20 backdrop-blur-sm p-2 rounded-xl hover:bg-white/30 transition hover:scale-110 duration-300"
             >
               <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -678,20 +741,20 @@ const Orders = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 relative z-10">
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition-all duration-300 hover:scale-105 border border-white/5">
             <p className="text-xs text-indigo-200">Total Orders</p>
             <p className="text-2xl font-bold">{orderStats.total}</p>
           </div>
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3">
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition-all duration-300 hover:scale-105 border border-white/5">
             <p className="text-xs text-indigo-200">Pending</p>
             <p className="text-2xl font-bold text-yellow-300">{orderStats.pending}</p>
           </div>
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3">
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition-all duration-300 hover:scale-105 border border-white/5">
             <p className="text-xs text-indigo-200">Completed</p>
             <p className="text-2xl font-bold text-green-300">{orderStats.completed}</p>
           </div>
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3">
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition-all duration-300 hover:scale-105 border border-white/5">
             <p className="text-xs text-indigo-200">Revenue</p>
             <p className="text-2xl font-bold">${orderStats.revenue.toFixed(2)}</p>
           </div>
@@ -699,12 +762,12 @@ const Orders = () => {
       </div>
 
       {/* ===== MODE SELECTOR ===== */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 sm:p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 sm:p-4 hover:shadow-md transition-all duration-300">
         <div className="flex flex-wrap justify-between items-center gap-3">
           <div className="flex gap-2">
             <button
               onClick={() => setViewMode('create')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 ${
                 viewMode === 'create'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25'
                   : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -718,7 +781,7 @@ const Orders = () => {
                 setViewMode('list');
                 loadSavedOrders();
               }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-all duration-300 hover:scale-105 ${
                 viewMode === 'list'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/25'
                   : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -726,7 +789,7 @@ const Orders = () => {
             >
               <List className="w-4 h-4" />
               Orders
-              <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full">
+              <span className="ml-1 text-xs bg-white/20 px-2 py-0.5 rounded-full animate-pulse">
                 {savedOrders.length}
               </span>
             </button>
@@ -734,7 +797,7 @@ const Orders = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={handleReset}
-              className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-300 hover:rotate-180"
               title="Reset form"
             >
               <RefreshCw className="w-4 h-4 text-gray-500" />
@@ -745,19 +808,19 @@ const Orders = () => {
 
       {/* ===== CREATE ORDER VIEW ===== */}
       {viewMode === 'create' && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-6 animate-fadeIn">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-6 animate-fadeIn hover:shadow-md transition-all duration-300">
           
           {/* Order Header */}
           <div className="flex flex-wrap justify-between items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
             <div>
               <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-600" />
+                <FileText className="w-5 h-5 text-indigo-600 animate-pulse" />
                 Order #{orderNo}
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">Create a new customer order</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
+              <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300">
                 <span className="text-xs text-gray-500 dark:text-gray-400">Status:</span>
                 <select 
                   value={orderStatus}
@@ -770,7 +833,7 @@ const Orders = () => {
                   <option value="Cancelled">❌ Cancelled</option>
                 </select>
               </div>
-              <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
+              <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300">
                 <span className="text-xs text-gray-500 dark:text-gray-400">Payment:</span>
                 <select 
                   value={paymentMethod}
@@ -787,7 +850,7 @@ const Orders = () => {
           </div>
 
           {/* Customer Selection */}
-          <div className="mb-6">
+          <div className="mb-6 group">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
               <User className="w-4 h-4 text-indigo-500" />
               Select Customer <span className="text-red-500">*</span>
@@ -810,7 +873,7 @@ const Orders = () => {
                     setSelectedCustomerName('');
                   }
                 }}
-                className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
               >
                 <option value="">🔍 Select a customer...</option>
                 {customers.map((customer) => {
@@ -828,7 +891,7 @@ const Orders = () => {
                 })}
               </select>
               {selectedCustomerName && (
-                <div className="mt-2 flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                <div className="mt-2 flex items-center gap-2 text-sm text-green-600 dark:text-green-400 animate-fadeIn">
                   <Check className="w-4 h-4" />
                   Customer selected: <span className="font-medium">{selectedCustomerName}</span>
                 </div>
@@ -842,7 +905,7 @@ const Orders = () => {
               <h3 className="font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
                 <Package className="w-4 h-4 text-purple-500" />
                 Order Items
-                <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full text-gray-500 dark:text-gray-400">
+                <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full text-gray-500 dark:text-gray-400 animate-pulse">
                   {totalItems} items
                 </span>
               </h3>
@@ -854,27 +917,27 @@ const Orders = () => {
               </button>
             </div>
 
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <div className="relative mb-3 group">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-indigo-500 transition-colors w-4 h-4" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="🔍 Search products by name, barcode..."
-                className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
               />
             </div>
           </div>
 
           {/* Items Table */}
           {items.length === 0 ? (
-            <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center text-gray-400 dark:text-gray-500 hover:border-indigo-300 dark:hover:border-indigo-700 transition">
-              <Package className="w-16 h-16 mx-auto mb-4 opacity-30" />
+            <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center text-gray-400 dark:text-gray-500 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all duration-300 hover:scale-[1.01]">
+              <Package className="w-16 h-16 mx-auto mb-4 opacity-30 animate-float" />
               <p className="text-lg font-medium">No items added yet</p>
               <p className="text-sm mt-1">Search for products and click "Add Item" to start building your order</p>
               <button 
                 onClick={addItem}
-                className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition"
+                className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all duration-300 hover:scale-105"
               >
                 <Plus className="w-4 h-4 inline mr-2" />
                 Add First Item
@@ -895,26 +958,29 @@ const Orders = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {items.map((item, index) => (
-                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition group animate-slideIn" style={{ animationDelay: `${index * 0.05}s` }}>
+                    <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all duration-300 group animate-slideIn" style={{ animationDelay: `${index * 0.05}s` }}>
                       <td className="px-3 py-2">
-                        <select 
-                          value={item.product_id}
-                          onChange={(e) => updateItem(item.id, 'product_id', e.target.value)}
-                          className="w-full min-w-[150px] px-2 py-2 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">Select Product</option>
-                          {filteredProducts.map((product) => {
-                            const pId = product.PRODUCT_ID || product.product_id;
-                            const name = product.NAME_EN || product.name_en || 'Unknown';
-                            const price = product.SALEOUT_PRICE || product.saleout_price || 0;
-                            const stock = product.STOCK || 0;
-                            return (
-                              <option key={pId} value={pId}>
-                                {name} - ${Number(price).toFixed(2)} {stock > 0 ? `(${stock} in stock)` : '⚠️ Out of stock'}
-                              </option>
-                            );
-                          })}
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{getProductEmoji(item.product_name || '')}</span>
+                          <select 
+                            value={item.product_id}
+                            onChange={(e) => updateItem(item.id, 'product_id', e.target.value)}
+                            className="flex-1 min-w-[130px] px-2 py-2 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
+                          >
+                            <option value="">Select Product</option>
+                            {filteredProducts.map((product) => {
+                              const pId = product.PRODUCT_ID || product.product_id;
+                              const name = product.NAME_EN || product.name_en || 'Unknown';
+                              const price = product.SALEOUT_PRICE || product.saleout_price || 0;
+                              const stock = product.STOCK || 0;
+                              return (
+                                <option key={pId} value={pId}>
+                                  {name} - ${Number(price).toFixed(2)} {stock > 0 ? `(${stock} in stock)` : '⚠️ Out of stock'}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <input 
@@ -922,7 +988,7 @@ const Orders = () => {
                           min="1"
                           value={item.qty}
                           onChange={(e) => updateItem(item.id, 'qty', Math.max(1, Number(e.target.value) || 1))}
-                          className="w-16 text-center px-2 py-2 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-16 text-center px-2 py-2 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
                         />
                       </td>
                       <td className="px-3 py-2">
@@ -932,7 +998,7 @@ const Orders = () => {
                           min="0"
                           value={item.unit_price}
                           onChange={(e) => updateItem(item.id, 'unit_price', Math.max(0, Number(e.target.value) || 0))}
-                          className="w-24 text-right px-2 py-2 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-24 text-right px-2 py-2 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
                         />
                       </td>
                       <td className="px-3 py-2">
@@ -942,7 +1008,7 @@ const Orders = () => {
                           min="0"
                           value={item.discount}
                           onChange={(e) => updateItem(item.id, 'discount', Math.max(0, Number(e.target.value) || 0))}
-                          className="w-20 text-right px-2 py-2 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-20 text-right px-2 py-2 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
                         />
                       </td>
                       <td className="px-3 py-2 font-bold text-right text-indigo-600 dark:text-indigo-400">
@@ -951,7 +1017,7 @@ const Orders = () => {
                       <td className="px-3 py-2 text-center">
                         <button 
                           onClick={() => removeItem(item.id)}
-                          className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition group-hover:scale-110"
+                          className="text-red-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-300 group-hover:scale-110"
                           title="Remove item"
                         >
                           <X className="w-4 h-4" />
@@ -983,13 +1049,13 @@ const Orders = () => {
                       min="0"
                       value={discount}
                       onChange={(e) => setDiscount(Math.max(0, Number(e.target.value) || 0))}
-                      className="w-32 text-right px-2 py-1.5 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-32 text-right px-2 py-1.5 border border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300"
                     />
                   </div>
                 </div>
                 <div className="flex justify-between py-3 font-bold text-lg border-t-2 border-gray-200 dark:border-gray-600">
                   <span className="text-gray-800 dark:text-white">Grand Total:</span>
-                  <span className="text-2xl text-indigo-600 dark:text-indigo-400">${grandTotal.toFixed(2)}</span>
+                  <span className="text-2xl text-indigo-600 dark:text-indigo-400 animate-pulse">${grandTotal.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -1000,7 +1066,7 @@ const Orders = () => {
             <button 
               onClick={handleSaveOrder}
               disabled={loading || items.length === 0}
-              className="flex items-center gap-2 px-6 py-2.5 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-gray-600/20"
+              className="flex items-center gap-2 px-6 py-2.5 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-all duration-300 hover:scale-105 font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-gray-600/20"
             >
               <Save className="w-4 h-4" />
               Save Draft
@@ -1008,7 +1074,7 @@ const Orders = () => {
             <button 
               onClick={handlePurchase}
               disabled={isProcessingPurchase || items.length === 0}
-              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-green-600/20"
+              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-300 hover:scale-105 font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-green-600/20"
             >
               {isProcessingPurchase ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -1020,7 +1086,7 @@ const Orders = () => {
             <button 
               onClick={handlePrintInvoice}
               disabled={!orderId && !savedOrderData}
-              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl hover:from-red-700 hover:to-rose-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-red-600/20"
+              className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl hover:from-red-700 hover:to-rose-700 transition-all duration-300 hover:scale-105 font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-red-600/20"
             >
               <Printer className="w-4 h-4" />
               Print Invoice
@@ -1036,7 +1102,7 @@ const Orders = () => {
             }`}>
               <div className="flex items-start gap-3">
                 {purchaseResult.success ? (
-                  <CheckCircle className="w-6 h-6 text-green-500 mt-0.5" />
+                  <CheckCircle className="w-6 h-6 text-green-500 mt-0.5 animate-bounce" />
                 ) : (
                   <AlertCircle className="w-6 h-6 text-red-500 mt-0.5" />
                 )}
@@ -1064,7 +1130,7 @@ const Orders = () => {
 
       {/* ===== ORDER LIST VIEW ===== */}
       {viewMode === 'list' && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-6 animate-fadeIn">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 sm:p-6 animate-fadeIn hover:shadow-md transition-all duration-300">
           
           {/* Header */}
           <div className="flex flex-wrap justify-between items-center mb-6">
@@ -1078,11 +1144,10 @@ const Orders = () => {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              {/* Filter */}
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300 hover:border-indigo-300"
               >
                 <option value="all">All Status</option>
                 <option value="Pending">⏳ Pending</option>
@@ -1091,7 +1156,6 @@ const Orders = () => {
                 <option value="Cancelled">❌ Cancelled</option>
               </select>
               
-              {/* Sort */}
               <select
                 value={`${sortBy}-${sortOrder}`}
                 onChange={(e) => {
@@ -1099,7 +1163,7 @@ const Orders = () => {
                   setSortBy(newSortBy);
                   setSortOrder(newSortOrder);
                 }}
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-300 hover:border-indigo-300"
               >
                 <option value="date-desc">Newest First</option>
                 <option value="date-asc">Oldest First</option>
@@ -1111,7 +1175,7 @@ const Orders = () => {
 
               <button
                 onClick={loadSavedOrders}
-                className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-300 hover:scale-110"
                 title="Refresh"
               >
                 <RefreshCw className="w-4 h-4 text-gray-500" />
@@ -1122,7 +1186,7 @@ const Orders = () => {
           {/* Orders List */}
           {filteredOrders.length === 0 ? (
             <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-              <ShoppingCart className="w-16 h-16 mx-auto mb-4 opacity-30" />
+              <ShoppingCart className="w-16 h-16 mx-auto mb-4 opacity-30 animate-float" />
               <p className="text-lg font-medium">No orders found</p>
               <p className="text-sm mt-1">
                 {savedOrders.length > 0 ? 'Try changing the filter' : 'Orders you create will appear here'}
@@ -1130,7 +1194,7 @@ const Orders = () => {
               {savedOrders.length === 0 && (
                 <button
                   onClick={() => setViewMode('create')}
-                  className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition"
+                  className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all duration-300 hover:scale-105"
                 >
                   <Plus className="w-4 h-4 inline mr-2" />
                   Create New Order
@@ -1153,7 +1217,7 @@ const Orders = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {filteredOrders.map((order, index) => (
-                    <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition group animate-slideIn" style={{ animationDelay: `${index * 0.04}s` }}>
+                    <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-all duration-300 group animate-slideIn" style={{ animationDelay: `${index * 0.04}s` }}>
                       <td className="px-4 py-3 text-sm font-mono font-medium text-indigo-600 dark:text-indigo-400">
                         {order.order_no}
                       </td>
@@ -1163,11 +1227,11 @@ const Orders = () => {
                       <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden md:table-cell">
                         {formatDate(order.date)}
                       </td>
-                      <td className="px-4 py-3 text-sm font-bold text-right dark:text-white">
+                      <td className="px-4 py-3 text-sm font-bold text-right dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                         ${(order.total || 0).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-300 ${getStatusBadge(order.status)} group-hover:scale-105`}>
                           {getStatusIcon(order.status)}
                           {order.status || 'Pending'}
                         </span>
@@ -1179,14 +1243,14 @@ const Orders = () => {
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => handleViewOrder(order)}
-                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition group-hover:scale-110"
+                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-300 group-hover:scale-110"
                             title="View details"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleDeleteOrder(order.id)}
-                            className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition group-hover:scale-110"
+                            className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-300 group-hover:scale-110"
                             title="Delete order"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1208,7 +1272,7 @@ const Orders = () => {
               {savedOrders.length > 0 && (
                 <button
                   onClick={handleClearAll}
-                  className="ml-4 text-xs text-red-500 hover:text-red-700 transition"
+                  className="ml-4 text-xs text-red-500 hover:text-red-700 transition-all duration-300 hover:scale-110"
                 >
                   Clear All
                 </button>
@@ -1230,7 +1294,7 @@ const Orders = () => {
               </h2>
               <button 
                 onClick={() => setShowOrderDetail(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-300 hover:rotate-90"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
@@ -1277,7 +1341,7 @@ const Orders = () => {
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                     {selectedOrder.items?.map((item, index) => (
-                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
+                      <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-all duration-300">
                         <td className="px-4 py-2 text-sm dark:text-white">{item.product_name || 'Product'}</td>
                         <td className="px-4 py-2 text-sm text-center dark:text-white">{item.qty}</td>
                         <td className="px-4 py-2 text-sm text-right dark:text-white">${(item.unit_price || 0).toFixed(2)}</td>
@@ -1310,16 +1374,15 @@ const Orders = () => {
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex flex-wrap justify-end gap-3">
               <button 
                 onClick={() => setShowOrderDetail(false)}
-                className="px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition dark:text-white font-medium"
+                className="px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-300 dark:text-white font-medium"
               >
                 Close
               </button>
               <button 
                 onClick={() => {
                   setShowOrderDetail(false);
-                  // Print logic here
                 }}
-                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium flex items-center gap-2"
+                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 hover:scale-105 font-medium flex items-center gap-2"
               >
                 <Printer className="w-4 h-4" />
                 Print Invoice
@@ -1331,7 +1394,17 @@ const Orders = () => {
 
       {/* Footer */}
       <div className="text-center text-xs text-gray-400 dark:text-gray-500 py-4 border-t border-gray-200 dark:border-gray-700">
-        <p>🛒 Orders Management System | {new Date().toLocaleString()}</p>
+        <p className="flex items-center justify-center gap-4 flex-wrap">
+          <span>🛒 {filteredOrders.length} orders displayed</span>
+          <span>•</span>
+          <span>💰 ${orderStats.revenue.toFixed(2)} total revenue</span>
+          <span>•</span>
+          <span>⏳ {orderStats.pending} pending</span>
+          <span>•</span>
+          <span>✅ {orderStats.completed} completed</span>
+          <span>•</span>
+          <span>{new Date().toLocaleString()}</span>
+        </p>
       </div>
 
       {/* ===== CSS ANIMATIONS ===== */}
@@ -1352,16 +1425,28 @@ const Orders = () => {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.05); }
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-10px); }
+        }
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 0.2; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(1.1); }
+        }
+        @keyframes spin-slow {
+          0% { transform: translate(-50%, -50%) rotate(0deg); }
+          100% { transform: translate(-50%, -50%) rotate(360deg); }
         }
 
         .animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; }
         .animate-slideIn { animation: slideIn 0.4s ease-out forwards; opacity: 0; }
         .animate-slideInRight { animation: slideInRight 0.5s ease-out forwards; }
         .animate-slideUp { animation: slideUp 0.4s ease-out forwards; }
-        .animate-pulse { animation: pulse 2s ease-in-out infinite; }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        .animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
+        .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+        .animate-bounce { animation: bounce 1s ease-in-out infinite; }
+        .animation-delay-1000 { animation-delay: 1s; }
 
         /* Scrollbar */
         ::-webkit-scrollbar {

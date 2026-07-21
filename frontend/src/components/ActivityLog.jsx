@@ -1,116 +1,160 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
-
 import { 
-  Shield, Plus, Edit2, Trash2, X, Save, RefreshCw,
-  User, Users as UsersIcon, CheckCircle, AlertCircle,
-  Clock, Award, Star, Zap, Activity, Search,
-  Filter, ArrowUp, ArrowDown, Grid3x3, List,
-  Eye, Lock, Key, Phone, Mail, Calendar,
-  Crown, Briefcase, UserCheck, UserX,
-  Loader2, AlertTriangle, ChevronRight
+  Activity, Search, RefreshCw, Filter, X, 
+  Clock, User, Eye, Trash2, Download, 
+  AlertCircle, CheckCircle, Loader2,
+  Calendar, ChevronRight, ArrowUp, ArrowDown,
+  Grid3x3, List, FileText, Shield, Zap,
+  Sparkles, Award, Star, Gift, Heart
 } from 'lucide-react';
 
 // ============================================
-// API CONFIGURATION
+// API CONFIGURATION - FIXED ✅
 // ============================================
-const API_URL = import.meta.env?.VITE_API_URL || '';
+const API_BASE = import.meta.env?.VITE_API_URL || '';
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
+// Add interceptors for debugging
+api.interceptors.request.use(
+  config => {
+    console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  response => {
+    console.log('📥 API Response:', response.status, response.config.url);
+    return response;
+  },
+  error => {
+    console.error('❌ API Error:', error.response?.status, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
+
 // ============================================
-// MAIN USERS COMPONENT
+// MAIN ACTIVITYLOG COMPONENT
 // ============================================
-const Users = () => {
+const ActivityLog = () => {
   // ===== STATE =====
+  const [logs, setLogs] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('success');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [sortBy, setSortBy] = useState('username');
-  const [sortOrder, setSortOrder] = useState('asc');
-  const [viewMode, setViewMode] = useState('grid');
-  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [filterAction, setFilterAction] = useState('all');
+  const [filterUser, setFilterUser] = useState('all');
+  const [filterTable, setFilterTable] = useState('all');
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [viewMode, setViewMode] = useState('list');
+  const [selectedLogs, setSelectedLogs] = useState([]);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedUserDetail, setSelectedUserDetail] = useState(null);
-  const [userStats, setUserStats] = useState({
-    total: 0,
-    active: 0,
-    admins: 0,
-    cashiers: 0
-  });
-  const [showPassword, setShowPassword] = useState(false);
-
-  // ===== FORM DATA =====
-  const [formData, setFormData] = useState({
-    username: '',
-    password: '',
-    fullname: '',
-    role_id: '2',
-    email: '',
-    phone: '',
-    status: 'ACTIVE'
-  });
+  const [selectedLogDetail, setSelectedLogDetail] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   // ===== REFS =====
   const isMounted = useRef(true);
   const searchTimeout = useRef(null);
+  const headerRef = useRef(null);
 
-  // ===== FETCH USERS =====
-  const fetchUsers = useCallback(async () => {
+  // ===== MOUSE TRACKING =====
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  // ===== FETCH ACTIVITY LOGS - FIXED ✅ =====
+  const fetchActivityLogs = useCallback(async () => {
     setLoading(true);
+    setIsRefreshing(true);
     try {
-      const res = await api.get('/api/users', {
-        params: { search: searchTerm || undefined }
+      // ✅ FIXED: Removed '/api' prefix
+      const res = await api.get('/activity-logs', {
+        params: { limit: 200 }
       });
       if (isMounted.current) {
         const data = res.data || [];
-        setUsers(data);
-        calculateStats(data);
+        setLogs(data);
+        showMessage(`✅ Loaded ${data.length} activity logs`, 'success');
       }
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('❌ Error fetching activity logs:', error);
       if (isMounted.current) {
-        showMessage('❌ Failed to load users', 'error');
-        // Fallback data
-        const fallbackData = [
-          { user_id: 1, username: 'admin', fullname: 'Administrator', role_id: 1, role: 'Admin', status: 'ACTIVE', email: 'admin@example.com', phone: '555-0001', created_at: '2026-01-01' },
-          { user_id: 2, username: 'cashier1', fullname: 'John Doe', role_id: 2, role: 'Cashier', status: 'ACTIVE', email: 'john@example.com', phone: '555-0002', created_at: '2026-01-15' },
-          { user_id: 3, username: 'cashier2', fullname: 'Jane Smith', role_id: 2, role: 'Cashier', status: 'ACTIVE', email: 'jane@example.com', phone: '555-0003', created_at: '2026-02-01' },
-          { user_id: 4, username: 'viewer1', fullname: 'Robert Johnson', role_id: 3, role: 'Viewer', status: 'ACTIVE', email: 'robert@example.com', phone: '555-0004', created_at: '2026-02-15' },
-          { user_id: 5, username: 'cashier3', fullname: 'Mary Williams', role_id: 2, role: 'Cashier', status: 'INACTIVE', email: 'mary@example.com', phone: '555-0005', created_at: '2026-03-01' },
-        ];
-        setUsers(fallbackData);
-        calculateStats(fallbackData);
+        showMessage('❌ Failed to load activity logs', 'error');
+        // Fallback mock data
+        const mockLogs = generateMockLogs();
+        setLogs(mockLogs);
       }
     } finally {
       if (isMounted.current) {
         setLoading(false);
+        setIsRefreshing(false);
       }
     }
-  }, [searchTerm]);
-
-  // ===== CALCULATE STATS =====
-  const calculateStats = useCallback((data) => {
-    const stats = {
-      total: data.length,
-      active: data.filter(u => (u.status || 'ACTIVE') === 'ACTIVE').length,
-      admins: data.filter(u => u.role_id === 1 || u.role === 'Admin').length,
-      cashiers: data.filter(u => u.role_id === 2 || u.role === 'Cashier').length
-    };
-    setUserStats(stats);
   }, []);
+
+  // ===== FETCH USERS - FIXED ✅ =====
+  const fetchUsers = useCallback(async () => {
+    try {
+      // ✅ FIXED: Removed '/api' prefix
+      const res = await api.get('/users');
+      if (isMounted.current) {
+        setUsers(res.data || []);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching users:', error);
+      if (isMounted.current) {
+        setUsers([
+          { user_id: 1, username: 'admin', fullname: 'Administrator' },
+          { user_id: 2, username: 'cashier1', fullname: 'John Doe' },
+          { user_id: 3, username: 'cashier2', fullname: 'Jane Smith' },
+        ]);
+      }
+    }
+  }, []);
+
+  // ===== GENERATE MOCK LOGS =====
+  const generateMockLogs = () => {
+    const actions = ['Login', 'Logout', 'Created customer', 'Updated customer', 'Deleted customer', 'Created product', 'Updated product', 'Deleted product', 'Created order', 'Updated order', 'Deleted order', 'Created user', 'Updated user', 'Deleted user'];
+    const tables = ['TBL_CUSTOMERS', 'TBL_PRODUCTS', 'TBL_ORDERS', 'Tbl_Users', 'TBL_SUPPLIERS'];
+    const users = ['admin', 'cashier1', 'cashier2', 'manager1'];
+    const mockLogs = [];
+
+    for (let i = 0; i < 50; i++) {
+      const date = new Date();
+      date.setHours(date.getHours() - Math.floor(Math.random() * 72));
+      
+      mockLogs.push({
+        log_id: Date.now() + i,
+        user_id: Math.floor(Math.random() * 4) + 1,
+        username: users[Math.floor(Math.random() * users.length)],
+        action: actions[Math.floor(Math.random() * actions.length)],
+        table_name: tables[Math.floor(Math.random() * tables.length)],
+        record_id: Math.floor(Math.random() * 100) + 1,
+        action_date: date.toISOString(),
+      });
+    }
+
+    // Sort by date descending
+    mockLogs.sort((a, b) => new Date(b.action_date) - new Date(a.action_date));
+    return mockLogs;
+  };
 
   // ===== SHOW MESSAGE =====
   const showMessage = useCallback((text, type = 'success') => {
@@ -123,7 +167,7 @@ const Users = () => {
   // ===== INITIAL LOAD =====
   useEffect(() => {
     isMounted.current = true;
-    fetchUsers();
+    Promise.all([fetchActivityLogs(), fetchUsers()]);
 
     return () => {
       isMounted.current = false;
@@ -131,7 +175,12 @@ const Users = () => {
         clearTimeout(searchTimeout.current);
       }
     };
-  }, [fetchUsers]);
+  }, [fetchActivityLogs, fetchUsers]);
+
+  // ===== REFRESH =====
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([fetchActivityLogs(), fetchUsers()]);
+  }, [fetchActivityLogs, fetchUsers]);
 
   // ===== SEARCH DEBOUNCE =====
   useEffect(() => {
@@ -139,301 +188,273 @@ const Users = () => {
       clearTimeout(searchTimeout.current);
     }
     searchTimeout.current = setTimeout(() => {
-      fetchUsers();
-    }, 500);
+      // Search handled by useMemo
+    }, 300);
 
     return () => {
       if (searchTimeout.current) {
         clearTimeout(searchTimeout.current);
       }
     };
-  }, [searchTerm, fetchUsers]);
+  }, [searchTerm]);
 
-  // ===== FILTERED & SORTED USERS =====
-  // ✅ MUST BE DEFINED BEFORE toggleSelectAll
-  const filteredUsers = useMemo(() => {
-    let result = [...users];
+  // ===== FILTERED & SORTED LOGS =====
+  const filteredLogs = useMemo(() => {
+    let result = [...logs];
 
-    // Role filter
-    if (filterRole !== 'all') {
-      const roleMap = {
-        'admin': [1, 'Admin'],
-        'cashier': [2, 'Cashier'],
-        'viewer': [3, 'Viewer']
-      };
-      const roles = roleMap[filterRole] || [];
-      result = result.filter(u => {
-        const userRole = u.role_id || (u.Role === 'Admin' ? 1 : u.Role === 'Cashier' ? 2 : 3);
-        return roles.includes(userRole) || roles.includes(u.role);
+    // Search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(log => {
+        const username = log.username || '';
+        const action = log.action || '';
+        const table = log.table_name || '';
+        return username.toLowerCase().includes(term) ||
+               action.toLowerCase().includes(term) ||
+               table.toLowerCase().includes(term) ||
+               String(log.record_id || '').includes(term);
       });
     }
 
-    // Status filter
-    if (filterStatus !== 'all') {
-      result = result.filter(u => {
-        const status = (u.status || 'ACTIVE').toUpperCase();
-        return filterStatus === 'active' ? status === 'ACTIVE' : status === 'INACTIVE';
-      });
+    // Action filter
+    if (filterAction !== 'all') {
+      result = result.filter(log => log.action === filterAction);
+    }
+
+    // User filter
+    if (filterUser !== 'all') {
+      result = result.filter(log => String(log.user_id) === filterUser);
+    }
+
+    // Table filter
+    if (filterTable !== 'all') {
+      result = result.filter(log => log.table_name === filterTable);
     }
 
     // Sort
     result.sort((a, b) => {
-      let aVal = a[sortBy] ?? '';
-      let bVal = b[sortBy] ?? '';
-      
-      if (typeof aVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
+      let comparison = 0;
+      switch (sortBy) {
+        case 'date':
+          comparison = new Date(a.action_date) - new Date(b.action_date);
+          break;
+        case 'user':
+          comparison = (a.username || '').localeCompare(b.username || '');
+          break;
+        case 'action':
+          comparison = (a.action || '').localeCompare(b.action || '');
+          break;
+        case 'table':
+          comparison = (a.table_name || '').localeCompare(b.table_name || '');
+          break;
+        default:
+          comparison = new Date(a.action_date) - new Date(b.action_date);
       }
-      
-      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
+      return sortOrder === 'asc' ? comparison : -comparison;
     });
 
     return result;
-  }, [users, filterRole, filterStatus, sortBy, sortOrder]);
+  }, [logs, searchTerm, filterAction, filterUser, filterTable, sortBy, sortOrder]);
 
-  // ===== TOGGLE SELECT ALL =====
-  // ✅ Now defined AFTER filteredUsers
-  const toggleSelectAll = useCallback(() => {
-    if (selectedUsers.length === filteredUsers.length) {
-      setSelectedUsers([]);
-    } else {
-      setSelectedUsers(filteredUsers.map(u => u.user_id));
-    }
-  }, [selectedUsers, filteredUsers]);
+  // ===== CALCULATE STATS =====
+  const stats = useMemo(() => {
+    const total = logs.length;
+    const actionCounts = {};
+    const userCounts = {};
+    const tableCounts = {};
 
-  // ===== HANDLE SUBMIT =====
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    
-    if (!formData.username.trim()) {
-      showMessage('❌ Username is required', 'error');
-      setSubmitting(false);
-      return;
-    }
-    if (!editingUser && !formData.password) {
-      showMessage('❌ Password is required for new users', 'error');
-      setSubmitting(false);
-      return;
-    }
-    if (formData.password && formData.password.length < 4) {
-      showMessage('❌ Password must be at least 4 characters', 'error');
-      setSubmitting(false);
-      return;
-    }
-    
+    logs.forEach(log => {
+      const action = log.action || 'Unknown';
+      const user = log.username || 'Unknown';
+      const table = log.table_name || 'Unknown';
+      
+      actionCounts[action] = (actionCounts[action] || 0) + 1;
+      userCounts[user] = (userCounts[user] || 0) + 1;
+      tableCounts[table] = (tableCounts[table] || 0) + 1;
+    });
+
+    return { total, actionCounts, userCounts, tableCounts };
+  }, [logs]);
+
+  // ===== GET ACTION EMOJI =====
+  const getActionEmoji = (action) => {
+    const emojis = {
+      'Login': '🔐',
+      'Logout': '🚪',
+      'Created customer': '👤',
+      'Updated customer': '✏️',
+      'Deleted customer': '🗑️',
+      'Created product': '📦',
+      'Updated product': '✏️',
+      'Deleted product': '🗑️',
+      'Created order': '🛒',
+      'Updated order': '✏️',
+      'Deleted order': '🗑️',
+      'Created user': '👤',
+      'Updated user': '✏️',
+      'Deleted user': '🗑️',
+    };
+    return emojis[action] || '📋';
+  };
+
+  // ===== GET ACTION COLOR =====
+  const getActionColor = (action) => {
+    if (action.includes('Created')) return 'text-emerald-500 dark:text-emerald-400';
+    if (action.includes('Updated')) return 'text-blue-500 dark:text-blue-400';
+    if (action.includes('Deleted')) return 'text-red-500 dark:text-red-400';
+    if (action.includes('Login')) return 'text-green-500 dark:text-green-400';
+    if (action.includes('Logout')) return 'text-orange-500 dark:text-orange-400';
+    return 'text-purple-500 dark:text-purple-400';
+  };
+
+  // ===== GET ACTION BADGE =====
+  const getActionBadge = (action) => {
+    const colors = {
+      'Login': 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800',
+      'Logout': 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-800',
+      'Created customer': 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
+      'Updated customer': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
+      'Deleted customer': 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800',
+      'Created product': 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
+      'Updated product': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
+      'Deleted product': 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800',
+      'Created order': 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
+      'Updated order': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
+      'Deleted order': 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800',
+      'Created user': 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
+      'Updated user': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
+      'Deleted user': 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800',
+    };
+    return colors[action] || 'bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700';
+  };
+
+  // ===== FORMAT DATE =====
+  const formatDate = (dateStr) => {
     try {
-      const submitData = {
-        username: formData.username.trim(),
-        password: formData.password,
-        fullname: formData.fullname.trim() || formData.username.trim(),
-        role_id: formData.role_id,
-        email: formData.email || '',
-        phone: formData.phone || '',
-        status: formData.status || 'ACTIVE'
-      };
-      
-      if (editingUser) {
-        await api.put(`/api/users/${editingUser.user_id}`, submitData);
-        showMessage('✅ User updated successfully!');
-      } else {
-        await api.post('/api/users', submitData);
-        showMessage('✅ User created successfully!');
-      }
-      
-      setShowModal(false);
-      setEditingUser(null);
-      resetForm();
-      fetchUsers();
-    } catch (error) {
-      console.error('Submit error:', error.response?.data || error.message);
-      showMessage(`❌ ${error.response?.data?.error || 'Failed to save user'}`, 'error');
-    } finally {
-      setSubmitting(false);
+      const date = new Date(dateStr);
+      if (isNaN(date)) return dateStr;
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    } catch {
+      return dateStr;
     }
   };
 
-  // ===== HANDLE DELETE =====
-  const handleDelete = useCallback(async (id) => {
-    if (id === 1) {
-      showMessage('❌ Cannot delete the admin user', 'error');
-      return;
-    }
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
-    
+  // ===== TIME AGO =====
+  const timeAgo = (dateStr) => {
     try {
-      await api.delete(`/api/users/${id}`);
-      showMessage('✅ User deleted successfully!');
-      fetchUsers();
-    } catch (error) {
-      console.error('Delete error:', error);
-      showMessage('❌ Failed to delete user', 'error');
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins} min ago`;
+      if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+      if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      return formatDate(dateStr);
+    } catch {
+      return dateStr;
     }
-  }, [fetchUsers, showMessage]);
+  };
 
-  // ===== BULK DELETE =====
-  const handleBulkDelete = useCallback(async () => {
-    if (selectedUsers.length === 0) return;
-    if (selectedUsers.includes(1)) {
-      showMessage('❌ Cannot delete the admin user', 'error');
-      return;
-    }
-    if (!window.confirm(`Delete ${selectedUsers.length} selected users?`)) return;
-
-    try {
-      for (const id of selectedUsers) {
-        await api.delete(`/api/users/${id}`);
-      }
-      showMessage(`✅ ${selectedUsers.length} users deleted!`);
-      setSelectedUsers([]);
-      fetchUsers();
-    } catch (error) {
-      console.error('Bulk delete error:', error);
-      showMessage('❌ Failed to delete some users', 'error');
-    }
-  }, [selectedUsers, fetchUsers, showMessage]);
-
-  // ===== RESET FORM =====
-  const resetForm = useCallback(() => {
-    setFormData({
-      username: '',
-      password: '',
-      fullname: '',
-      role_id: '2',
-      email: '',
-      phone: '',
-      status: 'ACTIVE'
-    });
-  }, []);
-
-  // ===== OPEN MODAL =====
-  const openEditModal = useCallback((user) => {
-    setEditingUser(user);
-    setFormData({
-      username: user.username || '',
-      password: '',
-      fullname: user.fullname || '',
-      role_id: String(user.role_id || 2),
-      email: user.email || '',
-      phone: user.phone || '',
-      status: user.status || 'ACTIVE'
-    });
-    setShowModal(true);
-  }, []);
-
-  const openAddModal = useCallback(() => {
-    setEditingUser(null);
-    resetForm();
-    setShowModal(true);
-  }, [resetForm]);
-
-  // ===== VIEW USER DETAIL =====
-  const viewUserDetail = useCallback((user) => {
-    setSelectedUserDetail(user);
+  // ===== VIEW LOG DETAIL =====
+  const viewLogDetail = (log) => {
+    setSelectedLogDetail(log);
     setShowDetailModal(true);
-  }, []);
+  };
 
   // ===== TOGGLE SELECT =====
-  const toggleSelect = useCallback((id) => {
-    setSelectedUsers(prev => {
+  const toggleSelect = (id) => {
+    setSelectedLogs(prev => {
       if (prev.includes(id)) {
         return prev.filter(p => p !== id);
       } else {
         return [...prev, id];
       }
     });
-  }, []);
+  };
 
-  // ===== REFRESH =====
-  const handleRefresh = useCallback(async () => {
-    await fetchUsers();
-  }, [fetchUsers]);
-
-  // ===== GET ROLE BADGE =====
-  const getRoleBadge = useCallback((roleId, role) => {
-    if (typeof role === 'string') {
-      const roleMap = {
-        'Admin': 1,
-        'Cashier': 2,
-        'Viewer': 3
-      };
-      roleId = roleMap[role] || 2;
+  // ===== TOGGLE SELECT ALL =====
+  const toggleSelectAll = () => {
+    if (selectedLogs.length === filteredLogs.length) {
+      setSelectedLogs([]);
+    } else {
+      setSelectedLogs(filteredLogs.map(log => log.log_id));
     }
-    
-    const roles = {
-      1: { color: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800', label: 'Admin', icon: Crown },
-      2: { color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800', label: 'Cashier', icon: Briefcase },
-      3: { color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800', label: 'Viewer', icon: Eye }
-    };
-    const roleData = roles[roleId] || roles[2];
-    const Icon = roleData.icon;
-    return (
-      <span className={`px-2.5 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1.5 ${roleData.color}`}>
-        <Icon className="w-3 h-3" />
-        {roleData.label}
-      </span>
-    );
-  }, []);
+  };
 
-  // ===== GET STATUS BADGE =====
-  const getStatusBadge = useCallback((status) => {
-    const isActive = (status || 'ACTIVE').toUpperCase() === 'ACTIVE';
-    return isActive 
-      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-      : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800';
-  }, []);
-
-  // ===== GET STAT ICON =====
-  const getStatIcon = useCallback((type) => {
-    const icons = {
-      total: <UsersIcon className="w-5 h-5 text-indigo-500" />,
-      active: <UserCheck className="w-5 h-5 text-emerald-500" />,
-      admins: <Crown className="w-5 h-5 text-red-500" />,
-      cashiers: <Briefcase className="w-5 h-5 text-yellow-500" />
-    };
-    return icons[type] || icons.total;
-  }, []);
-
-  // ===== GET AVATAR COLOR =====
-  const getAvatarColor = useCallback((name) => {
-    const colors = [
-      'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 
-      'bg-blue-500', 'bg-green-500', 'bg-yellow-500',
-      'bg-red-500', 'bg-orange-500', 'bg-teal-500'
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  // ===== EXPORT LOGS =====
+  const exportLogs = () => {
+    if (!filteredLogs.length) {
+      showMessage('⚠️ No data to export', 'warning');
+      return;
     }
-    return colors[Math.abs(hash) % colors.length];
-  }, []);
 
-  // ===== GET INITIALS =====
-  const getInitials = useCallback((name) => {
-    if (!name) return '?';
-    const parts = name.split(' ');
-    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-  }, []);
-
-  // ===== FORMAT DATE =====
-  const formatDate = useCallback((dateValue) => {
-    if (!dateValue) return 'N/A';
     try {
-      const date = new Date(dateValue);
-      if (isNaN(date)) return dateValue;
-      return date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
+      const headers = ['ID', 'User', 'Action', 'Table', 'Record ID', 'Date'];
+      let csv = headers.join(',') + '\n';
+      
+      filteredLogs.forEach(log => {
+        const row = [
+          log.log_id || '',
+          `"${log.username || 'Unknown'}"`,
+          `"${log.action || ''}"`,
+          `"${log.table_name || ''}"`,
+          log.record_id || '',
+          `"${formatDate(log.action_date)}"`
+        ];
+        csv += row.join(',') + '\n';
       });
-    } catch {
-      return dateValue;
+      
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `activity_logs_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showMessage(`✅ ${filteredLogs.length} logs exported successfully!`, 'success');
+    } catch (error) {
+      console.error('Export error:', error);
+      showMessage('❌ Failed to export logs', 'error');
     }
-  }, []);
+  };
+
+  // ===== CLEAR SELECTED =====
+  const clearSelected = () => {
+    setSelectedLogs([]);
+    showMessage('✅ Selection cleared', 'info');
+  };
+
+  // ===== GET UNIQUE ACTIONS =====
+  const uniqueActions = useMemo(() => {
+    const actions = new Set();
+    logs.forEach(log => {
+      if (log.action) actions.add(log.action);
+    });
+    return Array.from(actions).sort();
+  }, [logs]);
+
+  // ===== GET UNIQUE TABLES =====
+  const uniqueTables = useMemo(() => {
+    const tables = new Set();
+    logs.forEach(log => {
+      if (log.table_name) tables.add(log.table_name);
+    });
+    return Array.from(tables).sort();
+  }, [logs]);
 
   // ===== LOADING =====
   if (loading) {
@@ -445,7 +466,7 @@ const Users = () => {
             <div className="w-8 h-8 rounded-full bg-indigo-500/20 animate-ping" />
           </div>
         </div>
-        <p className="text-gray-400 font-medium">Loading users...</p>
+        <p className="text-gray-400 font-medium">Loading activity logs...</p>
         <div className="flex gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0s' }} />
           <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0.2s' }} />
@@ -459,20 +480,23 @@ const Users = () => {
   return (
     <div className="space-y-4 p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen">
       
-      {/* ===== MESSAGE TOAST ===== */}
+      {/* ===== MESSAGE TOAST - FIXED ✅ ===== */}
       {message && (
         <div className={`fixed top-4 right-4 z-50 max-w-md w-full p-4 rounded-xl shadow-2xl border transform transition-all duration-500 animate-slideInRight ${
           messageType === 'success' 
-            ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' 
+            ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
             : messageType === 'error'
             ? 'bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
-            : 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+            : messageType === 'warning'
+            ? 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+            : 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
         }`}>
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 mt-0.5">
               {messageType === 'success' && <CheckCircle className="w-5 h-5 text-green-500" />}
               {messageType === 'error' && <AlertCircle className="w-5 h-5 text-red-500" />}
               {messageType === 'warning' && <AlertTriangle className="w-5 h-5 text-yellow-500" />}
+              {messageType === 'info' && <Activity className="w-5 h-5 text-blue-500" />}
             </div>
             <div className="flex-1 text-sm font-medium">{message}</div>
             <button onClick={() => setMessage('')} className="flex-shrink-0 opacity-50 hover:opacity-100 transition">
@@ -482,296 +506,187 @@ const Users = () => {
         </div>
       )}
 
-      {/* ===== HEADER WITH STATS ===== */}
-      <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl">
-        <div className="flex flex-wrap justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-3">
-              <Shield className="w-8 h-8" />
-              User Management
+      {/* ===== HEADER WITH STATS - 3D Tilt ===== */}
+      <div 
+        ref={headerRef}
+        className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden transition-all duration-300"
+        style={{
+          transform: `perspective(1000px) rotateX(${(mousePosition.y / window.innerHeight - 0.5) * 2}deg) rotateY(${(mousePosition.x / window.innerWidth - 0.5) * 2}deg)`,
+          transition: 'transform 0.1s ease-out'
+        }}
+      >
+        {/* Animated Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full animate-pulse-slow" />
+          <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-purple-300/20 rounded-full animate-pulse-slow animation-delay-1000" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-white/5 rounded-full animate-spin-slow" />
+        </div>
+
+        <div className="relative z-10 flex flex-wrap justify-between items-center">
+          <div className="animate-fadeInUp">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-medium text-white/80 tracking-wider uppercase">Audit Trail</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-3">
+              <Activity className="w-8 h-8" />
+              Activity Logs
             </h1>
-            <p className="text-indigo-100 mt-1 text-sm">Manage system users and their permissions</p>
+            <p className="text-indigo-100 mt-1 text-sm">Monitor all user activities and system events</p>
           </div>
           <div className="flex items-center gap-3 mt-3 sm:mt-0">
-            <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl text-sm flex items-center gap-2">
-              <Clock className="w-4 h-4" />
+            <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl text-sm flex items-center gap-2 border border-white/10 animate-pulse-slow">
+              <Clock className="w-4 h-4 text-white/80" />
               {new Date().toLocaleTimeString()}
             </div>
             <button 
               onClick={handleRefresh}
-              className="bg-white/20 backdrop-blur-sm p-2 rounded-xl hover:bg-white/30 transition"
+              disabled={isRefreshing}
+              className="bg-white/20 backdrop-blur-sm p-2 rounded-xl hover:bg-white/30 transition hover:scale-110 duration-300"
             >
-              <RefreshCw className="w-5 h-5" />
+              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
-              onClick={openAddModal}
-              className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl hover:bg-white/30 transition flex items-center gap-2"
+              onClick={exportLogs}
+              className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl hover:bg-white/30 transition hover:scale-105 duration-300 flex items-center gap-2 border border-white/10"
             >
-              <Plus className="w-4 h-4" />
-              Add User
+              <Download className="w-4 h-4" />
+              Export
             </button>
           </div>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
-          {[
-            { label: 'Total Users', value: userStats.total, icon: 'total' },
-            { label: 'Active', value: userStats.active, icon: 'active' },
-            { label: 'Admins', value: userStats.admins, icon: 'admins' },
-            { label: 'Cashiers', value: userStats.cashiers, icon: 'cashiers' }
-          ].map((stat, index) => (
-            <div key={index} className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition animate-slideUp" style={{ animationDelay: `${index * 0.1}s` }}>
-              <div className="flex items-center gap-2">
-                {getStatIcon(stat.icon)}
-                <p className="text-xs text-indigo-200">{stat.label}</p>
-              </div>
-              <p className="text-2xl font-bold">{stat.value}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 relative z-10">
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition-all duration-300 hover:scale-105 border border-white/5">
+            <p className="text-xs text-indigo-200">Total Activities</p>
+            <p className="text-2xl font-bold">{stats.total}</p>
+          </div>
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition-all duration-300 hover:scale-105 border border-white/5">
+            <p className="text-xs text-indigo-200">Unique Users</p>
+            <p className="text-2xl font-bold">{Object.keys(stats.userCounts).length}</p>
+          </div>
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition-all duration-300 hover:scale-105 border border-white/5">
+            <p className="text-xs text-indigo-200">Actions</p>
+            <p className="text-2xl font-bold">{Object.keys(stats.actionCounts).length}</p>
+          </div>
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition-all duration-300 hover:scale-105 border border-white/5">
+            <p className="text-xs text-indigo-200">Tables</p>
+            <p className="text-2xl font-bold">{Object.keys(stats.tableCounts).length}</p>
+          </div>
         </div>
       </div>
 
       {/* ===== CONTROLS ===== */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 hover:shadow-md transition-all duration-300">
         <div className="flex flex-wrap justify-between items-center gap-3">
           <div className="flex flex-wrap items-center gap-3 flex-1">
             {/* Search */}
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <div className="relative flex-1 min-w-[200px] group">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-indigo-500 transition-colors w-4 h-4" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="🔍 Search by username, name, email..."
-                className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                placeholder="🔍 Search by user, action, table..."
+                className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
               />
             </div>
 
-            {/* Filter Role */}
+            {/* Filter Action */}
             <select
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
-              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              value={filterAction}
+              onChange={(e) => setFilterAction(e.target.value)}
+              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 hover:border-indigo-300"
             >
-              <option value="all">All Roles</option>
-              <option value="admin">Admin</option>
-              <option value="cashier">Cashier</option>
-              <option value="viewer">Viewer</option>
+              <option value="all">All Actions</option>
+              {uniqueActions.map(action => (
+                <option key={action} value={action}>{action}</option>
+              ))}
             </select>
 
-            {/* Filter Status */}
+            {/* Filter User */}
             <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              value={filterUser}
+              onChange={(e) => setFilterUser(e.target.value)}
+              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 hover:border-indigo-300"
             >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="all">All Users</option>
+              {users.map(user => (
+                <option key={user.user_id} value={String(user.user_id)}>
+                  {user.username || user.fullname || `User ${user.user_id}`}
+                </option>
+              ))}
             </select>
 
-            {/* Sort */}
-            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-transparent text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none px-2"
-              >
-                <option value="username">Username</option>
-                <option value="fullname">Full Name</option>
-                <option value="role_id">Role</option>
-                <option value="status">Status</option>
-              </select>
-              <button
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600 transition"
-              >
-                {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4 text-gray-500" /> : <ArrowDown className="w-4 h-4 text-gray-500" />}
-              </button>
-            </div>
+            {/* Filter Table */}
+            <select
+              value={filterTable}
+              onChange={(e) => setFilterTable(e.target.value)}
+              className="px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 hover:border-indigo-300"
+            >
+              <option value="all">All Tables</option>
+              {uniqueTables.map(table => (
+                <option key={table} value={table}>{table}</option>
+              ))}
+            </select>
           </div>
 
           <div className="flex items-center gap-2">
             {/* View Mode */}
             <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
               <button
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-lg transition ${viewMode === 'grid' ? 'bg-white dark:bg-gray-600 shadow-sm' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-                title="Grid view"
-              >
-                <Grid3x3 className="w-4 h-4 text-gray-600 dark:text-gray-300" />
-              </button>
-              <button
                 onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded-lg transition ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 shadow-sm' : 'hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+                className={`p-1.5 rounded-lg transition-all duration-300 hover:scale-110 ${
+                  viewMode === 'list' 
+                    ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600' 
+                    : 'hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300'
+                }`}
                 title="List view"
               >
-                <List className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                <List className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-lg transition-all duration-300 hover:scale-110 ${
+                  viewMode === 'grid' 
+                    ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600' 
+                    : 'hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300'
+                }`}
+                title="Grid view"
+              >
+                <Grid3x3 className="w-4 h-4" />
               </button>
             </div>
 
             {/* Bulk Actions */}
-            {selectedUsers.length > 0 && (
+            {selectedLogs.length > 0 && (
               <button
-                onClick={handleBulkDelete}
-                className="px-3 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition flex items-center gap-2 text-sm"
+                onClick={clearSelected}
+                className="px-3 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all duration-300 hover:scale-105 flex items-center gap-2 text-sm shadow-lg shadow-indigo-600/20"
               >
-                <Trash2 className="w-4 h-4" />
-                Delete ({selectedUsers.length})
+                <X className="w-4 h-4" />
+                Clear ({selectedLogs.length})
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* ===== USERS GRID ===== */}
-      {filteredUsers.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-12 text-center">
-          <Shield className="w-20 h-20 mx-auto text-gray-300 dark:text-gray-600 mb-4 animate-float" />
-          <h3 className="text-xl font-medium text-gray-600 dark:text-gray-400">No users found</h3>
+      {/* ===== LOGS GRID ===== */}
+      {filteredLogs.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-12 text-center hover:shadow-lg transition-all duration-300">
+          <Activity className="w-20 h-20 mx-auto text-gray-300 dark:text-gray-600 mb-4 animate-float" />
+          <h3 className="text-xl font-medium text-gray-600 dark:text-gray-400">No activity logs found</h3>
           <p className="text-gray-400 dark:text-gray-500 mt-2">
-            {searchTerm || filterRole !== 'all' || filterStatus !== 'all' ? 'Try adjusting your search or filters' : 'Add your first user to get started'}
+            {searchTerm || filterAction !== 'all' || filterUser !== 'all' || filterTable !== 'all' 
+              ? 'Try adjusting your search or filters' 
+              : 'Activities will appear here as users interact with the system'}
           </p>
-          <button
-            onClick={openAddModal}
-            className="mt-4 px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium"
-          >
-            <Plus className="w-4 h-4 inline mr-2" />
-            Add User
-          </button>
         </div>
-      ) : viewMode === 'grid' ? (
-        // ===== GRID VIEW =====
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredUsers.map((user, index) => {
-            const id = user.user_id;
-            const username = user.username || 'Unknown';
-            const fullname = user.fullname || '';
-            const role = user.role || (user.role_id === 1 ? 'Admin' : user.role_id === 2 ? 'Cashier' : 'Viewer');
-            const roleId = user.role_id || (role === 'Admin' ? 1 : role === 'Cashier' ? 2 : 3);
-            const status = user.status || 'ACTIVE';
-            const initials = getInitials(fullname || username);
-            const avatarColor = getAvatarColor(fullname || username);
-            const isSelected = selectedUsers.includes(id);
-
-            return (
-              <div
-                key={id}
-                className={`bg-white dark:bg-gray-800 rounded-2xl shadow-sm border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group animate-fadeIn cursor-pointer ${
-                  isSelected ? 'border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30' : 'border-gray-100 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700'
-                }`}
-                style={{ animationDelay: `${index * 0.05}s` }}
-                onClick={() => toggleSelect(id)}
-              >
-                <div className="p-5">
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-lg ${avatarColor} shadow-lg relative`}>
-                        {initials}
-                        <div className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-gray-800 ${
-                          status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-red-500'
-                        }`} />
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="font-semibold text-gray-800 dark:text-white truncate max-w-[120px]">
-                          {username}
-                        </h3>
-                        {fullname && (
-                          <p className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[120px] flex items-center gap-1">
-                            <User className="w-3 h-3" />
-                            {fullname}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          viewUserDetail(user);
-                        }}
-                        className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition opacity-0 group-hover:opacity-100"
-                        title="View details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(user);
-                        }}
-                        className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition opacity-0 group-hover:opacity-100"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(id);
-                        }}
-                        className={`p-1.5 rounded-lg transition opacity-0 group-hover:opacity-100 ${
-                          id === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
-                        }`}
-                        title={id === 1 ? 'Cannot delete admin' : 'Delete'}
-                        disabled={id === 1}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Role & Status */}
-                  <div className="flex items-center gap-2 mb-3">
-                    {getRoleBadge(roleId, role)}
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(status)}`}>
-                      {status}
-                    </span>
-                  </div>
-
-                  {/* Contact Info */}
-                  <div className="space-y-1.5">
-                    {user.email && (
-                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2 truncate">
-                        <Mail className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                        <span className="truncate">{user.email}</span>
-                      </p>
-                    )}
-                    {user.phone && (
-                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
-                        <Phone className="w-3.5 h-3.5 text-emerald-500" />
-                        {user.phone}
-                      </p>
-                    )}
-                    {user.created_at && (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5" />
-                        Joined {formatDate(user.created_at)}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Footer */}
-                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                      <Key className="w-3 h-3" />
-                      ID: {id}
-                    </span>
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
-                      {role}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
+      ) : viewMode === 'list' ? (
         // ===== LIST VIEW =====
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-all duration-300">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800/50">
@@ -779,92 +694,74 @@ const Users = () => {
                   <th className="px-3 py-3 w-10">
                     <input
                       type="checkbox"
-                      checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
+                      checked={selectedLogs.length === filteredLogs.length && filteredLogs.length > 0}
                       onChange={toggleSelectAll}
                       className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
                     />
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">User</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">Full Name</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">Role</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">Email</th>
-                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Action</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">Table</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">Record ID</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">Time</th>
+                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {filteredUsers.map((user, index) => {
-                  const id = user.user_id;
-                  const username = user.username || 'Unknown';
-                  const fullname = user.fullname || '';
-                  const role = user.role || (user.role_id === 1 ? 'Admin' : user.role_id === 2 ? 'Cashier' : 'Viewer');
-                  const roleId = user.role_id || (role === 'Admin' ? 1 : role === 'Cashier' ? 2 : 3);
-                  const status = user.status || 'ACTIVE';
-                  const isSelected = selectedUsers.includes(id);
+                {filteredLogs.map((log, index) => {
+                  const isSelected = selectedLogs.includes(log.log_id);
+                  const actionEmoji = getActionEmoji(log.action);
+                  const actionColor = getActionColor(log.action);
 
                   return (
                     <tr 
-                      key={id} 
-                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition group animate-slideIn ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/10' : ''}`}
+                      key={log.log_id} 
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-all duration-300 group animate-slideIn ${
+                        isSelected ? 'bg-indigo-50 dark:bg-indigo-900/10' : ''
+                      }`}
                       style={{ animationDelay: `${index * 0.03}s` }}
                     >
                       <td className="px-3 py-3">
                         <input
                           type="checkbox"
                           checked={isSelected}
-                          onChange={() => toggleSelect(id)}
+                          onChange={() => toggleSelect(log.log_id)}
                           className="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500"
                         />
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs ${getAvatarColor(fullname || username)}`}>
-                            {getInitials(fullname || username)}
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs bg-indigo-500`}>
+                            {log.username ? log.username.charAt(0).toUpperCase() : '?'}
                           </div>
-                          <span className="font-medium text-sm dark:text-white">{username}</span>
+                          <span className="font-medium text-sm dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {log.username || 'Unknown'}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-300 hidden md:table-cell">
-                        {fullname || '-'}
-                      </td>
-                      <td className="px-3 py-3 hidden sm:table-cell">
-                        {getRoleBadge(roleId, role)}
-                      </td>
-                      <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell">
-                        {user.email || '-'}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(status)}`}>
-                          {status}
+                      <td className="px-3 py-3">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${getActionBadge(log.action)} transition-all duration-300 group-hover:scale-105`}>
+                          <span className="text-base">{actionEmoji}</span>
+                          {log.action || 'Unknown'}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => viewUserDetail(user)}
-                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition group-hover:scale-110"
-                            title="View"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => openEditModal(user)}
-                            className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition group-hover:scale-110"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(id)}
-                            className={`p-1.5 rounded-lg transition group-hover:scale-110 ${
-                              id === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
-                            }`}
-                            title={id === 1 ? 'Cannot delete admin' : 'Delete'}
-                            disabled={id === 1}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                      <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400 hidden md:table-cell">
+                        {log.table_name || '-'}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell">
+                        {log.record_id || '-'}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400 hidden sm:table-cell">
+                        {timeAgo(log.action_date)}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <button
+                          onClick={() => viewLogDetail(log)}
+                          className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-300 group-hover:scale-110"
+                          title="View details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -873,291 +770,174 @@ const Users = () => {
             </table>
           </div>
         </div>
+      ) : (
+        // ===== GRID VIEW =====
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredLogs.map((log, index) => {
+            const isSelected = selectedLogs.includes(log.log_id);
+            const actionEmoji = getActionEmoji(log.action);
+            const actionColor = getActionColor(log.action);
+
+            return (
+              <div
+                key={log.log_id}
+                className={`bg-white dark:bg-gray-800 rounded-2xl shadow-sm border-2 transition-all duration-500 hover:shadow-xl hover:-translate-y-2 group animate-fadeIn cursor-pointer ${
+                  isSelected ? 'border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30' : 'border-gray-100 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700'
+                }`}
+                style={{ animationDelay: `${index * 0.04}s` }}
+                onClick={() => toggleSelect(log.log_id)}
+              >
+                <div className="p-5">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-2xl bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 transition-all duration-300 group-hover:scale-110`}>
+                        {actionEmoji}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-white text-sm group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                          {log.username || 'Unknown'}
+                        </p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                          {timeAgo(log.action_date)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        viewLogDetail(log);
+                      }}
+                      className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110"
+                      title="View details"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Action */}
+                  <div className="mb-3">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${getActionBadge(log.action)} transition-all duration-300 group-hover:scale-105`}>
+                      {log.action || 'Unknown'}
+                    </span>
+                  </div>
+
+                  {/* Details */}
+                  <div className="space-y-1.5">
+                    {log.table_name && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                        <span className="text-xs text-gray-400">Table:</span>
+                        <span className="font-medium">{log.table_name}</span>
+                      </p>
+                    )}
+                    {log.record_id && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                        <span className="text-xs text-gray-400">Record ID:</span>
+                        <span className="font-mono font-medium">{log.record_id}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 flex items-center gap-2">
+                      <Clock className="w-3 h-3" />
+                      {formatDate(log.action_date)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* ===== FOOTER ===== */}
       <div className="text-center text-xs text-gray-400 dark:text-gray-500 py-4 border-t border-gray-200 dark:border-gray-700">
         <p className="flex items-center justify-center gap-4 flex-wrap">
-          <span>👥 {filteredUsers.length} users displayed</span>
+          <span>📋 {filteredLogs.length} logs displayed</span>
           <span>•</span>
-          <span>🛡️ {userStats.total} total users</span>
+          <span>💾 {stats.total} total logs</span>
           <span>•</span>
-          <span>✅ {userStats.active} active</span>
+          <span>👤 {Object.keys(stats.userCounts).length} unique users</span>
           <span>•</span>
-          <span>👑 {userStats.admins} admins</span>
-          <span>•</span>
-          <span>💼 {userStats.cashiers} cashiers</span>
+          <span>📊 {Object.keys(stats.actionCounts).length} unique actions</span>
           <span>•</span>
           <span>{new Date().toLocaleString()}</span>
         </p>
       </div>
 
-      {/* ===== USER DETAIL MODAL ===== */}
-      {showDetailModal && selectedUserDetail && (
+      {/* ===== LOG DETAIL MODAL ===== */}
+      {showDetailModal && selectedLogDetail && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp">
             <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
               <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
-                <Shield className="w-5 h-5 text-indigo-600" />
-                User Details
+                <Activity className="w-5 h-5 text-indigo-600" />
+                Log Details
               </h2>
               <button 
                 onClick={() => setShowDetailModal(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-300 hover:rotate-90"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             
             <div className="p-6">
-              {/* User Avatar */}
+              {/* User Info */}
               <div className="flex items-center gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
-                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl ${getAvatarColor(selectedUserDetail.fullname || selectedUserDetail.username)} shadow-lg`}>
-                  {getInitials(selectedUserDetail.fullname || selectedUserDetail.username)}
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-2xl bg-gradient-to-br from-indigo-500 to-purple-500 shadow-lg`}>
+                  {selectedLogDetail.username ? selectedLogDetail.username.charAt(0).toUpperCase() : '?'}
                 </div>
                 <div>
-                  <p className="text-lg font-bold dark:text-white">{selectedUserDetail.username}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{selectedUserDetail.fullname || 'No full name'}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {getRoleBadge(
-                      selectedUserDetail.role_id || (selectedUserDetail.role === 'Admin' ? 1 : selectedUserDetail.role === 'Cashier' ? 2 : 3),
-                      selectedUserDetail.role
-                    )}
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedUserDetail.status)}`}>
-                      {selectedUserDetail.status || 'ACTIVE'}
-                    </span>
-                  </div>
+                  <p className="text-lg font-bold dark:text-white">{selectedLogDetail.username || 'Unknown'}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">User ID: {selectedLogDetail.user_id || 'N/A'}</p>
                 </div>
               </div>
 
-              {/* Contact Details */}
+              {/* Action Details */}
               <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-                <User className="w-4 h-4 text-indigo-500" />
-                Contact Information
+                <Zap className="w-4 h-4 text-amber-500" />
+                Action Details
               </h3>
-              <div className="space-y-2 mb-6">
-                {selectedUserDetail.email && (
-                  <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                    <Mail className="w-4 h-4 text-blue-500" />
-                    <span className="text-sm dark:text-white">{selectedUserDetail.email}</span>
-                  </div>
-                )}
-                {selectedUserDetail.phone && (
-                  <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                    <Phone className="w-4 h-4 text-emerald-500" />
-                    <span className="text-sm dark:text-white">{selectedUserDetail.phone}</span>
-                  </div>
-                )}
-                {selectedUserDetail.created_at && (
-                  <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                    <Calendar className="w-4 h-4 text-purple-500" />
-                    <span className="text-sm dark:text-white">Joined: {formatDate(selectedUserDetail.created_at)}</span>
-                  </div>
-                )}
+              <div className="space-y-3 mb-6">
                 <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                  <Key className="w-4 h-4 text-amber-500" />
-                  <span className="text-sm dark:text-white">User ID: {selectedUserDetail.user_id}</span>
+                  <span className="text-base">{getActionEmoji(selectedLogDetail.action)}</span>
+                  <span className={`font-medium ${getActionColor(selectedLogDetail.action)}`}>
+                    {selectedLogDetail.action || 'Unknown'}
+                  </span>
                 </div>
+                {selectedLogDetail.table_name && (
+                  <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                    <FileText className="w-4 h-4 text-purple-500" />
+                    <span className="dark:text-white">Table: <span className="font-medium">{selectedLogDetail.table_name}</span></span>
+                  </div>
+                )}
+                {selectedLogDetail.record_id && (
+                  <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
+                    <Key className="w-4 h-4 text-amber-500" />
+                    <span className="dark:text-white">Record ID: <span className="font-mono font-medium">{selectedLogDetail.record_id}</span></span>
+                  </div>
+                )}
+              </div>
+
+              {/* Timestamp */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
+                <p className="text-xs text-gray-400">Timestamp</p>
+                <p className="text-sm font-medium dark:text-white">{formatDate(selectedLogDetail.action_date)}</p>
               </div>
             </div>
 
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-              <button 
-                onClick={() => {
-                  setShowDetailModal(false);
-                  openEditModal(selectedUserDetail);
-                }}
-                className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium flex items-center gap-2"
-              >
-                <Edit2 className="w-4 h-4" />
-                Edit
-              </button>
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
               <button 
                 onClick={() => setShowDetailModal(false)}
-                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium"
+                className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 hover:scale-105 font-medium flex items-center gap-2"
               >
+                <X className="w-4 h-4" />
                 Close
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== ADD/EDIT MODAL ===== */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp">
-            <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
-                <Shield className="w-5 h-5 text-indigo-600" />
-                {editingUser ? 'Edit User' : 'Add New User'}
-              </h2>
-              <button 
-                onClick={() => setShowModal(false)} 
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition"
-                disabled={submitting}
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="space-y-4">
-                {/* Username */}
-                <div>
-                  <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
-                    Username <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.username}
-                    onChange={(e) => setFormData({...formData, username: e.target.value})}
-                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                    placeholder="Enter username"
-                    disabled={submitting}
-                  />
-                </div>
-
-                {/* Full Name */}
-                <div>
-                  <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
-                    <User className="w-4 h-4" />
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.fullname}
-                    onChange={(e) => setFormData({...formData, fullname: e.target.value})}
-                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                    placeholder="Enter full name"
-                    disabled={submitting}
-                  />
-                </div>
-
-                {/* Password */}
-                <div>
-                  <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
-                    <Lock className="w-4 h-4" />
-                    {editingUser ? 'Password (leave blank to keep current)' : 'Password *'}
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required={!editingUser}
-                      value={formData.password}
-                      onChange={(e) => setFormData({...formData, password: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition pr-10"
-                      placeholder={editingUser ? 'Leave blank to keep current' : 'Enter password (min 4 chars)'}
-                      disabled={submitting}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition"
-                    >
-                      {showPassword ? <X className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Email & Phone */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
-                      <Mail className="w-4 h-4" />
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                      placeholder="Enter email"
-                      disabled={submitting}
-                    />
-                  </div>
-                  <div>
-                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
-                      <Phone className="w-4 h-4" />
-                      Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                      placeholder="Enter phone"
-                      disabled={submitting}
-                    />
-                  </div>
-                </div>
-
-                {/* Role & Status */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
-                      <Briefcase className="w-4 h-4" />
-                      Role
-                    </label>
-                    <select
-                      value={formData.role_id}
-                      onChange={(e) => setFormData({...formData, role_id: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                      disabled={submitting}
-                    >
-                      <option value="1">Admin</option>
-                      <option value="2">Cashier</option>
-                      <option value="3">Viewer</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className=" text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
-                      <UserCheck className="w-4 h-4" />
-                      Status
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => setFormData({...formData, status: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                      disabled={submitting}
-                    >
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <button 
-                  type="button" 
-                  onClick={() => setShowModal(false)} 
-                  className="px-6 py-2.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition dark:text-white font-medium disabled:opacity-50"
-                  disabled={submitting}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      {editingUser ? 'Update User' : 'Create User'}
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
@@ -1184,13 +964,24 @@ const Users = () => {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-10px); }
         }
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 0.2; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(1.1); }
+        }
+        @keyframes spin-slow {
+          0% { transform: translate(-50%, -50%) rotate(0deg); }
+          100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
 
         .animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; opacity: 0; }
         .animate-slideIn { animation: slideIn 0.4s ease-out forwards; opacity: 0; }
         .animate-slideInRight { animation: slideInRight 0.5s ease-out forwards; }
         .animate-slideUp { animation: slideUp 0.4s ease-out forwards; opacity: 0; }
         .animate-float { animation: float 3s ease-in-out infinite; }
-        .animate-pulse { animation: pulse 2s ease-in-out infinite; }
+        .animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
+        .animate-spin-slow { animation: spin-slow 20s linear infinite; }
+        .animate-bounce { animation: bounce 1s ease-in-out infinite; }
+        .animation-delay-1000 { animation-delay: 1s; }
 
         /* Scrollbar */
         ::-webkit-scrollbar {
@@ -1218,4 +1009,4 @@ const Users = () => {
   );
 };
 
-export default Users;
+export default ActivityLog;

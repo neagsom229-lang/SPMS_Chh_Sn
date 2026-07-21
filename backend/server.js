@@ -23,24 +23,6 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 console.log('📊 Using Microsoft Access Database');
 
-// ... rest of your server code
-
-// ... rest of your server code
-const express = require("express");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-const dbModule = require("./config/database");
-
-const app = express();
-const PORT = process.env.PORT || 5000;
-
-// ============================================
-// MIDDLEWARE
-// ============================================
-app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-
 // ============================================
 // ACTIVITY LOG - IN-MEMORY STORAGE
 // ============================================
@@ -156,25 +138,17 @@ app.get("/api/dashboard/stats", (req, res) => {
     }
   };
 
-  dbModule.get(
-    "SELECT COUNT(*) as count FROM TBL_CUSTOMERS WHERE STATUS = 'Active'",
-    [],
-    (err, r) => {
-      stats.totalCustomers = r?.count || 0;
-      completed++;
-      checkComplete();
-    }
-  );
+  dbModule.get("SELECT COUNT(*) as count FROM TBL_CUSTOMERS WHERE STATUS = 'Active'", [], (err, r) => {
+    stats.totalCustomers = r?.count || 0;
+    completed++;
+    checkComplete();
+  });
 
-  dbModule.get(
-    "SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'",
-    [],
-    (err, r) => {
-      stats.totalProducts = r?.count || 0;
-      completed++;
-      checkComplete();
-    }
-  );
+  dbModule.get("SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'", [], (err, r) => {
+    stats.totalProducts = r?.count || 0;
+    completed++;
+    checkComplete();
+  });
 
   dbModule.get("SELECT COUNT(*) as count FROM TBL_ORDERS", [], (err, r) => {
     stats.totalOrders = r?.count || 0;
@@ -182,35 +156,23 @@ app.get("/api/dashboard/stats", (req, res) => {
     checkComplete();
   });
 
-  dbModule.get(
-    "SELECT SUM(AMOUNT_US) as revenue FROM TBL_ORDERS",
-    [],
-    (err, r) => {
-      stats.totalRevenue = r?.revenue || 0;
-      completed++;
-      checkComplete();
-    }
-  );
+  dbModule.get("SELECT SUM(AMOUNT_US) as revenue FROM TBL_ORDERS", [], (err, r) => {
+    stats.totalRevenue = r?.revenue || 0;
+    completed++;
+    checkComplete();
+  });
 
-  dbModule.get(
-    "SELECT COUNT(*) as count FROM Tbl_Stock WHERE QtyAvailable <= 5",
-    [],
-    (err, r) => {
-      stats.lowStockItems = r?.count || 0;
-      completed++;
-      checkComplete();
-    }
-  );
+  dbModule.get("SELECT COUNT(*) as count FROM Tbl_Stock WHERE QtyAvailable <= 5", [], (err, r) => {
+    stats.lowStockItems = r?.count || 0;
+    completed++;
+    checkComplete();
+  });
 
-  dbModule.get(
-    "SELECT COUNT(*) as count FROM TBL_ORDERS WHERE STATUS = 'Pending'",
-    [],
-    (err, r) => {
-      stats.pendingOrders = r?.count || 0;
-      completed++;
-      checkComplete();
-    }
-  );
+  dbModule.get("SELECT COUNT(*) as count FROM TBL_ORDERS WHERE STATUS = 'Pending'", [], (err, r) => {
+    stats.pendingOrders = r?.count || 0;
+    completed++;
+    checkComplete();
+  });
 });
 
 // ============================================
@@ -238,24 +200,18 @@ app.get("/api/customers", (req, res) => {
 
 app.get("/api/customers/:id", (req, res) => {
   const { id } = req.params;
-  dbModule.get(
-    `SELECT * FROM TBL_CUSTOMERS WHERE CUS_ID = '${id}'`,
-    [],
-    (err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!row) return res.status(404).json({ error: "Customer not found" });
-      res.json(row);
-    }
-  );
+  dbModule.get(`SELECT * FROM TBL_CUSTOMERS WHERE CUS_ID = '${id}'`, [], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: "Customer not found" });
+    res.json(row);
+  });
 });
 
 app.post("/api/customers", (req, res) => {
   const { FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE } = req.body;
 
   if (!FIRST_NAME || !LAST_NAME) {
-    return res
-      .status(400)
-      .json({ error: "First name and last name are required" });
+    return res.status(400).json({ error: "First name and last name are required" });
   }
 
   const safeFirstName = (FIRST_NAME || "").replace(/'/g, "''");
@@ -297,12 +253,7 @@ app.post("/api/customers", (req, res) => {
         return res.status(500).json({ error: err.message });
       }
 
-      logActivity(
-        req.body.user_id || 1,
-        "Created customer",
-        "TBL_CUSTOMERS",
-        newCusId
-      );
+      logActivity(req.body.user_id || 1, "Created customer", "TBL_CUSTOMERS", newCusId);
       res.json({
         cus_id: newCusId,
         message: "Customer created successfully",
@@ -313,8 +264,7 @@ app.post("/api/customers", (req, res) => {
 
 app.put("/api/customers/:id", (req, res) => {
   const { id } = req.params;
-  const { FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE, STATUS } =
-    req.body;
+  const { FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE, STATUS } = req.body;
 
   const safeFirstName = (FIRST_NAME || "").replace(/'/g, "''");
   const safeLastName = (LAST_NAME || "").replace(/'/g, "''");
@@ -341,8 +291,7 @@ app.put("/api/customers/:id", (req, res) => {
       console.error("❌ Update customer error:", err.message);
       return res.status(500).json({ error: err.message });
     }
-    if (this.changes === 0)
-      return res.status(404).json({ error: "Customer not found" });
+    if (this.changes === 0) return res.status(404).json({ error: "Customer not found" });
 
     logActivity(req.body.user_id || 1, "Updated customer", "TBL_CUSTOMERS", id);
     res.json({ message: "Customer updated successfully" });
@@ -351,26 +300,16 @@ app.put("/api/customers/:id", (req, res) => {
 
 app.delete("/api/customers/:id", (req, res) => {
   const { id } = req.params;
-  dbModule.run(
-    `UPDATE TBL_CUSTOMERS SET STATUS = 'Inactive' WHERE CUS_ID = '${id}'`,
-    [],
-    function (err) {
-      if (err) {
-        console.error("❌ Delete customer error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0)
-        return res.status(404).json({ error: "Customer not found" });
-
-      logActivity(
-        req.body.user_id || 1,
-        "Deleted customer",
-        "TBL_CUSTOMERS",
-        id
-      );
-      res.json({ message: "Customer deleted successfully" });
+  dbModule.run(`UPDATE TBL_CUSTOMERS SET STATUS = 'Inactive' WHERE CUS_ID = '${id}'`, [], function (err) {
+    if (err) {
+      console.error("❌ Delete customer error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    if (this.changes === 0) return res.status(404).json({ error: "Customer not found" });
+
+    logActivity(req.body.user_id || 1, "Deleted customer", "TBL_CUSTOMERS", id);
+    res.json({ message: "Customer deleted successfully" });
+  });
 });
 
 // ============================================
@@ -398,15 +337,11 @@ app.get("/api/products", (req, res) => {
 
 app.get("/api/products/:id", (req, res) => {
   const { id } = req.params;
-  dbModule.get(
-    `SELECT * FROM TBL_PRODUCTS WHERE PRODUCT_ID = '${id}'`,
-    [],
-    (err, row) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (!row) return res.status(404).json({ error: "Product not found" });
-      res.json(row);
-    }
-  );
+  dbModule.get(`SELECT * FROM TBL_PRODUCTS WHERE PRODUCT_ID = '${id}'`, [], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: "Product not found" });
+    res.json(row);
+  });
 });
 
 app.post("/api/products", (req, res) => {
@@ -476,12 +411,7 @@ app.post("/api/products", (req, res) => {
             return res.status(500).json({ error: err.message });
           }
 
-          logActivity(
-            req.body.user_id || 1,
-            "Created product",
-            "TBL_PRODUCTS",
-            newProductId
-          );
+          logActivity(req.body.user_id || 1, "Created product", "TBL_PRODUCTS", newProductId);
           res.json({
             product_id: newProductId,
             message: "Product created successfully",
@@ -531,8 +461,7 @@ app.put("/api/products/:id", (req, res) => {
       console.error("❌ Update product error:", err.message);
       return res.status(500).json({ error: err.message });
     }
-    if (this.changes === 0)
-      return res.status(404).json({ error: "Product not found" });
+    if (this.changes === 0) return res.status(404).json({ error: "Product not found" });
 
     logActivity(req.body.user_id || 1, "Updated product", "TBL_PRODUCTS", id);
     res.json({ message: "Product updated successfully" });
@@ -541,31 +470,24 @@ app.put("/api/products/:id", (req, res) => {
 
 app.delete("/api/products/:id", (req, res) => {
   const { id } = req.params;
-  dbModule.run(
-    `UPDATE TBL_PRODUCTS SET STATUS = 'Inactive' WHERE PRODUCT_ID = '${id}'`,
-    [],
-    function (err) {
-      if (err) {
-        console.error("❌ Delete product error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0)
-        return res.status(404).json({ error: "Product not found" });
-
-      logActivity(req.body.user_id || 1, "Deleted product", "TBL_PRODUCTS", id);
-      res.json({ message: "Product deleted successfully" });
+  dbModule.run(`UPDATE TBL_PRODUCTS SET STATUS = 'Inactive' WHERE PRODUCT_ID = '${id}'`, [], function (err) {
+    if (err) {
+      console.error("❌ Delete product error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    if (this.changes === 0) return res.status(404).json({ error: "Product not found" });
+
+    logActivity(req.body.user_id || 1, "Deleted product", "TBL_PRODUCTS", id);
+    res.json({ message: "Product deleted successfully" });
+  });
 });
 
 // ============================================
 // ORDERS
 // ============================================
 
-// GET ALL ORDERS
 app.get("/api/orders", (req, res) => {
   const { limit = 50, status } = req.query;
-
   let sql = "SELECT * FROM TBL_ORDERS";
 
   if (status) {
@@ -586,21 +508,11 @@ app.get("/api/orders", (req, res) => {
   });
 });
 
-// GET PENDING ORDERS - FIXED: Separate route
 app.get("/api/orders/pending", (req, res) => {
   console.log("📋 Fetching pending orders...");
 
   const sql = `
-    SELECT 
-      OR_ID,
-      ORDER_NO,
-      ORDER_DATE,
-      AMOUNT_US,
-      STATUS,
-      PaymentMethod,
-      NOTES,
-      EMP_PREPARE,
-      CUSTOMER_ID
+    SELECT OR_ID, ORDER_NO, ORDER_DATE, AMOUNT_US, STATUS, PaymentMethod, NOTES, EMP_PREPARE, CUSTOMER_ID
     FROM TBL_ORDERS
     WHERE STATUS IN ('Pending', 'Processing')
     ORDER BY ORDER_DATE DESC
@@ -616,38 +528,25 @@ app.get("/api/orders/pending", (req, res) => {
   });
 });
 
-// GET RECENT ORDERS
 app.get("/api/orders/recent", (req, res) => {
-  dbModule.all(
-    "SELECT * FROM TBL_ORDERS ORDER BY ORDER_DATE DESC",
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("❌ Recent orders error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      const recent = rows.slice(0, 10);
-      res.json(recent);
+  dbModule.all("SELECT * FROM TBL_ORDERS ORDER BY ORDER_DATE DESC", [], (err, rows) => {
+    if (err) {
+      console.error("❌ Recent orders error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    const recent = rows.slice(0, 10);
+    res.json(recent);
+  });
 });
 
-// GET LOW STOCK PRODUCTS
 app.get("/api/stock/low-stock", (req, res) => {
   console.log("📊 Fetching low stock products...");
 
   const sql = `
-    SELECT 
-      p.PRODUCT_ID,
-      p.NAME_EN,
-      p.NAME_KH,
-      s.QtyAvailable,
-      p.QTY_ALERT,
-      p.SALEOUT_PRICE
+    SELECT p.PRODUCT_ID, p.NAME_EN, p.NAME_KH, s.QtyAvailable, p.QTY_ALERT, p.SALEOUT_PRICE
     FROM Tbl_Stock s
     LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID
-    WHERE s.QtyAvailable <= p.QTY_ALERT
-    AND p.STATUS = 'Active'
+    WHERE s.QtyAvailable <= p.QTY_ALERT AND p.STATUS = 'Active'
     ORDER BY s.QtyAvailable ASC
   `;
 
@@ -662,13 +561,12 @@ app.get("/api/stock/low-stock", (req, res) => {
 });
 
 // ============================================
-// ORDER DETAILS - FIXED: Proper ID handling
+// ORDER DETAILS
 // ============================================
 app.get("/api/orders/:id", (req, res) => {
   const { id } = req.params;
   console.log(`📊 Fetching order details for ID: ${id}`);
 
-  // Check if ID is numeric
   const numericId = parseInt(id, 10);
   if (isNaN(numericId)) {
     console.warn(`⚠️ Invalid order ID (not numeric): ${id}`);
@@ -676,16 +574,7 @@ app.get("/api/orders/:id", (req, res) => {
   }
 
   const orderSql = `
-    SELECT 
-      OR_ID,
-      ORDER_NO,
-      ORDER_DATE,
-      AMOUNT_US,
-      STATUS,
-      PaymentMethod,
-      NOTES,
-      EMP_PREPARE,
-      CUSTOMER_ID
+    SELECT OR_ID, ORDER_NO, ORDER_DATE, AMOUNT_US, STATUS, PaymentMethod, NOTES, EMP_PREPARE, CUSTOMER_ID
     FROM TBL_ORDERS
     WHERE OR_ID = ${numericId}
   `;
@@ -701,12 +590,7 @@ app.get("/api/orders/:id", (req, res) => {
     }
 
     const customerSql = `
-      SELECT 
-        CUS_ID,
-        FIRST_NAME,
-        LAST_NAME,
-        PHONE,
-        E_MAIL
+      SELECT CUS_ID, FIRST_NAME, LAST_NAME, PHONE, E_MAIL
       FROM TBL_CUSTOMERS
       WHERE CUS_ID = 'CUS${String(order.CUSTOMER_ID).padStart(3, "0")}' OR CUS_ID = '${order.CUSTOMER_ID}'
     `;
@@ -717,11 +601,7 @@ app.get("/api/orders/:id", (req, res) => {
         customer = null;
       }
 
-      const paymentSql = `
-        SELECT * FROM TBL_PAYMENT
-        WHERE OR_ID = ${numericId}
-      `;
-
+      const paymentSql = `SELECT * FROM TBL_PAYMENT WHERE OR_ID = ${numericId}`;
       dbModule.all(paymentSql, [], (err3, payments) => {
         if (err3) {
           console.warn("⚠️ Payments error:", err3.message);
@@ -729,15 +609,7 @@ app.get("/api/orders/:id", (req, res) => {
         }
 
         const itemsSql = `
-          SELECT 
-            ID,
-            OR_ID,
-            PRODUCT_ID,
-            QTY_ORDER as qty,
-            QTY_BONUS,
-            PRICE as unit_price,
-            DISCOUNT,
-            SUBTOTAL as subtotal
+          SELECT ID, OR_ID, PRODUCT_ID, QTY_ORDER as qty, QTY_BONUS, PRICE as unit_price, DISCOUNT, SUBTOTAL as subtotal
           FROM TBL_ORDERS_DETAILS
           WHERE OR_ID = ${numericId}
         `;
@@ -780,18 +652,14 @@ app.get("/api/orders/:id", (req, res) => {
 app.get("/api/payment-methods", (req, res) => {
   console.log("💳 Fetching payment methods...");
 
-  dbModule.all(
-    'SELECT * FROM TBL_PAYMENT_METHOD WHERE STATUS = "ACTIVE"',
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("❌ Payment methods error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log(`💳 Payment methods found: ${rows.length}`);
-      res.json(rows);
+  dbModule.all('SELECT * FROM TBL_PAYMENT_METHOD WHERE STATUS = "ACTIVE"', [], (err, rows) => {
+    if (err) {
+      console.error("❌ Payment methods error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    console.log(`💳 Payment methods found: ${rows.length}`);
+    res.json(rows);
+  });
 });
 
 // ============================================
@@ -799,92 +667,52 @@ app.get("/api/payment-methods", (req, res) => {
 // ============================================
 
 app.get("/api/stock", (req, res) => {
-  dbModule.all(
-    `SELECT 
-      s.*,
-      p.PRODUCT_ID as PRODUCT_CODE,
-      p.NAME_EN,
-      p.NAME_KH,
-      p.QTY_ALERT,
-      p.SALEOUT_PRICE
+  dbModule.all(`
+    SELECT s.*, p.PRODUCT_ID as PRODUCT_CODE, p.NAME_EN, p.NAME_KH, p.QTY_ALERT, p.SALEOUT_PRICE
     FROM Tbl_Stock s
-    LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID`,
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("❌ Stock error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log(`📊 Stock records found: ${rows.length}`);
-      res.json(rows);
+    LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID
+  `, [], (err, rows) => {
+    if (err) {
+      console.error("❌ Stock error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    console.log(`📊 Stock records found: ${rows.length}`);
+    res.json(rows);
+  });
 });
 
-// ============================================
-// STOCK CHECK
-// ============================================
 app.get("/api/stock/product/:id", (req, res) => {
   const { id } = req.params;
   console.log(`📊 Checking stock for product ID: ${id}`);
 
   if (!id || id === "null" || id === "undefined") {
-    return res.json({
-      ProductID: id,
-      QtyInStock: 0,
-      QtyReserved: 0,
-      QtyAvailable: 0,
-      PRODUCT_NAME: "Unknown",
-    });
+    return res.json({ ProductID: id, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: "Unknown" });
   }
 
   const productIdText = String(id);
   const findProductSql = `SELECT ID, PRODUCT_ID, NAME_EN FROM TBL_PRODUCTS WHERE PRODUCT_ID = '${productIdText}'`;
-  console.log("🔍 SQL:", findProductSql);
 
   dbModule.get(findProductSql, [], (err, product) => {
     if (err || !product) {
       console.warn(`⚠️ Product ${productIdText} not found in TBL_PRODUCTS`);
-      return res.json({
-        ProductID: productIdText,
-        QtyInStock: 0,
-        QtyReserved: 0,
-        QtyAvailable: 0,
-        PRODUCT_NAME: "Unknown",
-      });
+      return res.json({ ProductID: productIdText, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: "Unknown" });
     }
 
     const numericProductId = product.ID;
-    console.log(
-      `🔍 Found product with numeric ID: ${numericProductId}, Name: ${product.NAME_EN}`
-    );
+    console.log(`🔍 Found product with numeric ID: ${numericProductId}, Name: ${product.NAME_EN}`);
 
     const checkSql = `SELECT * FROM Tbl_Stock WHERE ProductID = ${numericProductId}`;
-    console.log("🔍 SQL:", checkSql);
 
     dbModule.get(checkSql, [], (err2, stock) => {
       if (err2) {
         console.error("❌ Stock check error:", err2.message);
-        return res.json({
-          ProductID: productIdText,
-          QtyInStock: 0,
-          QtyReserved: 0,
-          QtyAvailable: 0,
-          PRODUCT_NAME: product.NAME_EN || "Unknown",
-        });
+        return res.json({ ProductID: productIdText, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: product.NAME_EN || "Unknown" });
       }
 
       if (!stock) {
         const createSql = `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) VALUES (${numericProductId}, 0, 0, 0)`;
-        console.log("🔍 SQL:", createSql);
         dbModule.run(createSql, [], function () {
-          return res.json({
-            ProductID: productIdText,
-            QtyInStock: 0,
-            QtyReserved: 0,
-            QtyAvailable: 0,
-            PRODUCT_NAME: product.NAME_EN || "Unknown",
-          });
+          return res.json({ ProductID: productIdText, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: product.NAME_EN || "Unknown" });
         });
         return;
       }
@@ -946,33 +774,29 @@ app.get("/api/suppliers/:id", (req, res) => {
   const { id } = req.params;
   console.log(`🔍 GET /api/suppliers/${id}`);
 
-  dbModule.get(
-    `SELECT * FROM TBL_SUPPLIERS WHERE SUP_ID = '${id}'`,
-    [],
-    (err, row) => {
-      if (err) {
-        console.error("❌ Supplier error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      if (!row) {
-        return res.status(404).json({ error: "Supplier not found" });
-      }
-
-      const mappedRow = {
-        SUP_ID: row.SUP_ID,
-        SUP_NAME: row.COMPANY,
-        CONTACT_PERSON: `${row.FIRST_NAME || ''} ${row.LAST_NAME || ''}`.trim() || row.FIRST_NAME || row.LAST_NAME || '',
-        PHONE: row.PHONE,
-        EMAIL: row.E_MAIL,
-        ADDRESS: row.ADDRESS,
-        STATUS: row.STATUS,
-        WEBSITE: row.WEBSITE,
-        PAYMENT_TI: row.PAYMENT_TI
-      };
-
-      res.json(mappedRow);
+  dbModule.get(`SELECT * FROM TBL_SUPPLIERS WHERE SUP_ID = '${id}'`, [], (err, row) => {
+    if (err) {
+      console.error("❌ Supplier error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    if (!row) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+
+    const mappedRow = {
+      SUP_ID: row.SUP_ID,
+      SUP_NAME: row.COMPANY,
+      CONTACT_PERSON: `${row.FIRST_NAME || ''} ${row.LAST_NAME || ''}`.trim() || row.FIRST_NAME || row.LAST_NAME || '',
+      PHONE: row.PHONE,
+      EMAIL: row.E_MAIL,
+      ADDRESS: row.ADDRESS,
+      STATUS: row.STATUS,
+      WEBSITE: row.WEBSITE,
+      PAYMENT_TI: row.PAYMENT_TI
+    };
+
+    res.json(mappedRow);
+  });
 });
 
 app.post("/api/suppliers", (req, res) => {
@@ -988,10 +812,7 @@ app.post("/api/suppliers", (req, res) => {
 
   if (!supName) {
     console.error("❌ Missing supplier name");
-    return res.status(400).json({
-      error: "Supplier name is required",
-      received: req.body
-    });
+    return res.status(400).json({ error: "Supplier name is required", received: req.body });
   }
 
   let firstName = '';
@@ -1041,23 +862,10 @@ app.post("/api/suppliers", (req, res) => {
 
     const sql = `
       INSERT INTO TBL_SUPPLIERS (
-        SUP_ID, 
-        COMPANY, 
-        FIRST_NAME, 
-        LAST_NAME, 
-        PHONE, 
-        E_MAIL, 
-        ADDRESS,
-        STATUS
+        SUP_ID, COMPANY, FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, STATUS
       ) VALUES (
-        '${newSupId}',
-        '${safeCompany}',
-        '${safeFirstName}',
-        '${safeLastName}',
-        '${safePhone}',
-        '${safeEmail}',
-        '${safeAddress}',
-        'Active'
+        '${newSupId}', '${safeCompany}', '${safeFirstName}', '${safeLastName}',
+        '${safePhone}', '${safeEmail}', '${safeAddress}', 'Active'
       )
     `;
 
@@ -1069,12 +877,7 @@ app.post("/api/suppliers", (req, res) => {
         return res.status(500).json({ error: err.message });
       }
 
-      logActivity(
-        req.body.user_id || 1,
-        "Created supplier",
-        "TBL_SUPPLIERS",
-        newSupId
-      );
+      logActivity(req.body.user_id || 1, "Created supplier", "TBL_SUPPLIERS", newSupId);
 
       res.json({
         SUP_ID: newSupId,
@@ -1103,10 +906,7 @@ app.put("/api/suppliers/:id", (req, res) => {
 
   if (!supName) {
     console.error("❌ Missing supplier name");
-    return res.status(400).json({
-      error: "Supplier name is required",
-      received: req.body
-    });
+    return res.status(400).json({ error: "Supplier name is required", received: req.body });
   }
 
   let firstName = '';
@@ -1178,27 +978,18 @@ app.delete("/api/suppliers/:id", (req, res) => {
   const { id } = req.params;
   console.log(`🗑️ DELETE /api/suppliers/${id}`);
 
-  dbModule.run(
-    `UPDATE TBL_SUPPLIERS SET STATUS = 'Inactive' WHERE SUP_ID = '${id}'`,
-    [],
-    function (err) {
-      if (err) {
-        console.error("❌ Delete supplier error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: "Supplier not found" });
-      }
-
-      logActivity(
-        req.body.user_id || 1,
-        "Deleted supplier",
-        "TBL_SUPPLIERS",
-        id
-      );
-      res.json({ message: "Supplier deleted successfully" });
+  dbModule.run(`UPDATE TBL_SUPPLIERS SET STATUS = 'Inactive' WHERE SUP_ID = '${id}'`, [], function (err) {
+    if (err) {
+      console.error("❌ Delete supplier error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    if (this.changes === 0) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+
+    logActivity(req.body.user_id || 1, "Deleted supplier", "TBL_SUPPLIERS", id);
+    res.json({ message: "Supplier deleted successfully" });
+  });
 });
 
 // ============================================
@@ -1207,37 +998,22 @@ app.delete("/api/suppliers/:id", (req, res) => {
 
 app.get("/api/reports/customers", (req, res) => {
   console.log("📊 Generating Customer Report...");
-
-  dbModule.all(
-    "SELECT * FROM TBL_CUSTOMERS WHERE STATUS = 'Active' ORDER BY FIRST_NAME, LAST_NAME",
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("❌ Customer report error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log(`📊 Customer report: ${rows.length} records`);
-      res.json(rows || []);
+  dbModule.all("SELECT * FROM TBL_CUSTOMERS WHERE STATUS = 'Active' ORDER BY FIRST_NAME, LAST_NAME", [], (err, rows) => {
+    if (err) {
+      console.error("❌ Customer report error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    console.log(`📊 Customer report: ${rows.length} records`);
+    res.json(rows || []);
+  });
 });
 
 app.get("/api/reports/products", (req, res) => {
   console.log("📊 Generating Product Report...");
-
   const sql = `
-    SELECT 
-      ID,
-      PRODUCT_ID,
-      NAME_EN,
-      NAME_KH,
-      SALEOUT_PRICE as PRICE,
-      STATUS
-    FROM TBL_PRODUCTS
-    WHERE STATUS = 'Active'
-    ORDER BY NAME_EN
+    SELECT ID, PRODUCT_ID, NAME_EN, NAME_KH, SALEOUT_PRICE as PRICE, STATUS
+    FROM TBL_PRODUCTS WHERE STATUS = 'Active' ORDER BY NAME_EN
   `;
-
   dbModule.all(sql, [], (err, rows) => {
     if (err) {
       console.error("❌ Product report error:", err.message);
@@ -1250,17 +1026,7 @@ app.get("/api/reports/products", (req, res) => {
 
 app.get("/api/reports/orders", (req, res) => {
   console.log("📊 Generating Order Report...");
-
-  const sql = `
-    SELECT 
-      ORDER_NO,
-      ORDER_DATE,
-      AMOUNT_US as TOTAL_AMOUNT,
-      STATUS
-    FROM TBL_ORDERS
-    ORDER BY ORDER_DATE DESC
-  `;
-
+  const sql = `SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as TOTAL_AMOUNT, STATUS FROM TBL_ORDERS ORDER BY ORDER_DATE DESC`;
   dbModule.all(sql, [], (err, rows) => {
     if (err) {
       console.error("❌ Order report error:", err.message);
@@ -1273,22 +1039,11 @@ app.get("/api/reports/orders", (req, res) => {
 
 app.get("/api/reports/stock", (req, res) => {
   console.log("📊 Generating Stock Report...");
-
   const sql = `
-    SELECT 
-      s.StockID,
-      s.ProductID,
-      p.PRODUCT_ID as PRODUCT_CODE,
-      p.NAME_EN as PRODUCT_NAME,
-      s.QtyInStock as IN_STOCK,
-      s.QtyAvailable as AVAILABLE,
-      s.QtyReserved as RESERVED,
-      s.LastUpdated
-    FROM Tbl_Stock s
-    LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID
-    ORDER BY p.NAME_EN
+    SELECT s.StockID, s.ProductID, p.PRODUCT_ID as PRODUCT_CODE, p.NAME_EN as PRODUCT_NAME,
+           s.QtyInStock as IN_STOCK, s.QtyAvailable as AVAILABLE, s.QtyReserved as RESERVED, s.LastUpdated
+    FROM Tbl_Stock s LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID ORDER BY p.NAME_EN
   `;
-
   dbModule.all(sql, [], (err, rows) => {
     if (err) {
       console.error("❌ Stock report error:", err.message);
@@ -1300,75 +1055,44 @@ app.get("/api/reports/stock", (req, res) => {
 });
 
 // ============================================
-// ANALYTICS API - COMPLETELY FIXED
+// ANALYTICS API
 // ============================================
 
-// Helper: Get start date for range filter
 function getStartDateForRange(range) {
   const d = new Date();
   switch (range) {
-    case "last30days":
-      d.setDate(d.getDate() - 30);
-      break;
-    case "last90days":
-      d.setDate(d.getDate() - 90);
-      break;
-    case "last12months":
-      d.setMonth(d.getMonth() - 12);
-      break;
-    case "last6months":
-    default:
-      d.setMonth(d.getMonth() - 6);
-      break;
+    case "last30days": d.setDate(d.getDate() - 30); break;
+    case "last90days": d.setDate(d.getDate() - 90); break;
+    case "last12months": d.setMonth(d.getMonth() - 12); break;
+    default: d.setMonth(d.getMonth() - 6); break;
   }
   return d.toISOString().slice(0, 10);
 }
 
-// Helper: Safe number conversion
 function num(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
 }
 
-// Helper: Calculate growth percentage
-function growthPct(current, previous) {
-  if (!previous) return 0;
-  return Math.round(((current - previous) / previous) * 100);
-}
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-];
-
-// ============================================
-// FIXED: MONTHLY REVENUE - No parameterized queries
-// ============================================
 app.get("/api/analytics/monthly-revenue", (req, res) => {
   const { range = "last6months" } = req.query;
   const startDate = getStartDateForRange(range);
   console.log(`📊 Fetching monthly revenue (range=${range}, since ${startDate})...`);
 
-  // ✅ FIXED: Use Access date format # instead of ?
   const sql = `
-    SELECT
-      DatePart('yyyy', ORDER_DATE) as year,
-      DatePart('m', ORDER_DATE) as month,
-      SUM(AMOUNT_US) as revenue,
-      COUNT(*) as orders
-    FROM TBL_ORDERS
-    WHERE ORDER_DATE >= #${startDate}#
+    SELECT DatePart('yyyy', ORDER_DATE) as year, DatePart('m', ORDER_DATE) as month,
+           SUM(AMOUNT_US) as revenue, COUNT(*) as orders
+    FROM TBL_ORDERS WHERE ORDER_DATE >= #${startDate}#
     GROUP BY DatePart('yyyy', ORDER_DATE), DatePart('m', ORDER_DATE)
     ORDER BY DatePart('yyyy', ORDER_DATE) ASC, DatePart('m', ORDER_DATE) ASC
   `;
 
-  console.log("📝 SQL:", sql);
-
   dbModule.all(sql, [], (err, rows) => {
     if (err) {
       console.error("❌ Monthly revenue error:", err.message);
-      // Return mock data if query fails
-      return res.json(generateMockMonthlyRevenue(startDate));
+      return res.json([]);
     }
     const formatted = rows.map((row) => ({
       month: `${MONTH_NAMES[(row.month || 1) - 1]} ${row.year || ""}`.trim(),
@@ -1380,39 +1104,14 @@ app.get("/api/analytics/monthly-revenue", (req, res) => {
   });
 });
 
-// ============================================
-// MOCK DATA FOR FALLBACK
-// ============================================
-function generateMockMonthlyRevenue(startDate) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const currentMonth = new Date().getMonth();
-  const startMonth = new Date(startDate).getMonth();
-  const result = [];
-  
-  for (let i = 0; i < 6; i++) {
-    const monthIndex = (startMonth + i) % 12;
-    result.push({
-      month: months[monthIndex],
-      revenue: Math.floor(Math.random() * 8000) + 2000,
-      orders: Math.floor(Math.random() * 50) + 10,
-    });
-  }
-  return result;
-}
-
-// ============================================
-// FIXED: TOP PRODUCTS
-// ============================================
 app.get("/api/analytics/top-products", (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 10, 50);
   console.log(`📊 Fetching top ${limit} products...`);
 
-  // ✅ FIXED: Use TOP for Access
   const sql = `
-    SELECT TOP ${limit}
-      p.NAME_EN as product_name,
-      SUM(od.QTY_ORDER) as total_sold,
-      SUM(od.QTY_ORDER * od.PRICE) as revenue
+    SELECT TOP ${limit} p.NAME_EN as product_name,
+           SUM(od.QTY_ORDER) as total_sold,
+           SUM(od.QTY_ORDER * od.PRICE) as revenue
     FROM TBL_ORDERS_DETAILS od
     LEFT JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
     GROUP BY p.NAME_EN
@@ -1434,9 +1133,6 @@ app.get("/api/analytics/top-products", (req, res) => {
   });
 });
 
-// ============================================
-// FIXED: CUSTOMER HISTORY
-// ============================================
 app.get("/api/analytics/customer-history/:id", (req, res) => {
   const customerId = parseInt(req.params.id, 10);
   if (!Number.isFinite(customerId)) {
@@ -1445,11 +1141,9 @@ app.get("/api/analytics/customer-history/:id", (req, res) => {
   }
   console.log(`📊 Fetching customer history for ID: ${customerId}`);
 
-  // ✅ Use numeric ID directly in query
   const sql = `
     SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as amount, STATUS
-    FROM TBL_ORDERS
-    WHERE CUSTOMER_ID = ${customerId}
+    FROM TBL_ORDERS WHERE CUSTOMER_ID = ${customerId}
     ORDER BY ORDER_DATE DESC
   `;
 
@@ -1469,22 +1163,15 @@ app.get("/api/analytics/customer-history/:id", (req, res) => {
   });
 });
 
-// ============================================
-// FIXED: YEARLY REVENUE
-// ============================================
 app.get("/api/analytics/yearly-revenue", (req, res) => {
   console.log("📊 Fetching yearly revenue...");
-
   const sql = `
-    SELECT
-      DatePart('yyyy', ORDER_DATE) as year,
-      SUM(AMOUNT_US) as revenue,
-      COUNT(*) as orders
+    SELECT DatePart('yyyy', ORDER_DATE) as year,
+           SUM(AMOUNT_US) as revenue, COUNT(*) as orders
     FROM TBL_ORDERS
     GROUP BY DatePart('yyyy', ORDER_DATE)
     ORDER BY DatePart('yyyy', ORDER_DATE) ASC
   `;
-
   dbModule.all(sql, [], (err, rows) => {
     if (err) {
       console.error("❌ Yearly revenue error:", err.message);
@@ -1500,291 +1187,52 @@ app.get("/api/analytics/yearly-revenue", (req, res) => {
   });
 });
 
-// ============================================
-// FIXED: ANALYTICS SUMMARY
-// ============================================
 app.get("/api/analytics/summary", (req, res) => {
   console.log("📊 Fetching analytics summary...");
 
-  // ✅ FIXED: Use Access date functions without parameters
   const currentSql = `
-    SELECT 
-      SUM(AMOUNT_US) as revenue, 
-      COUNT(*) as orders
+    SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders
     FROM TBL_ORDERS
     WHERE DatePart('m', ORDER_DATE) = DatePart('m', Date())
     AND DatePart('yyyy', ORDER_DATE) = DatePart('yyyy', Date())
   `;
-  
   const previousSql = `
-    SELECT 
-      SUM(AMOUNT_US) as revenue, 
-      COUNT(*) as orders
+    SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders
     FROM TBL_ORDERS
     WHERE DatePart('m', ORDER_DATE) = DatePart('m', DateAdd('m', -1, Date()))
     AND DatePart('yyyy', ORDER_DATE) = DatePart('yyyy', DateAdd('m', -1, Date()))
   `;
-  
   const productsSql = `SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'`;
 
   let completed = 0;
   const total = 3;
-  let currentRevenue = 0;
-  let currentOrders = 0;
-  let previousRevenue = 0;
-  let previousOrders = 0;
-  let totalProducts = 0;
+  let currentRevenue = 0, currentOrders = 0, previousRevenue = 0, previousOrders = 0, totalProducts = 0;
 
   const finish = () => {
     completed++;
     if (completed !== total) return;
-
     res.json({
       totalRevenue: currentRevenue,
       totalOrders: currentOrders,
       totalProducts: totalProducts,
       averageOrderValue: currentOrders > 0 ? currentRevenue / currentOrders : 0,
-      revenueGrowth: growthPct(currentRevenue, previousRevenue),
-      orderGrowth: growthPct(currentOrders, previousOrders),
+      revenueGrowth: previousRevenue ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100) : 0,
+      orderGrowth: previousOrders ? Math.round(((currentOrders - previousOrders) / previousOrders) * 100) : 0,
     });
   };
 
   dbModule.get(currentSql, [], (err, row) => {
-    if (err) {
-      console.error("❌ Analytics summary (current) error:", err.message);
-    } else if (row) {
-      currentRevenue = num(row.revenue);
-      currentOrders = num(row.orders);
-    }
+    if (!err && row) { currentRevenue = num(row.revenue); currentOrders = num(row.orders); }
     finish();
   });
 
   dbModule.get(previousSql, [], (err, row) => {
-    if (err) {
-      console.error("❌ Analytics summary (previous) error:", err.message);
-    } else if (row) {
-      previousRevenue = num(row.revenue);
-      previousOrders = num(row.orders);
-    }
+    if (!err && row) { previousRevenue = num(row.revenue); previousOrders = num(row.orders); }
     finish();
   });
 
   dbModule.get(productsSql, [], (err, row) => {
-    if (err) {
-      console.error("❌ Analytics summary (products) error:", err.message);
-    } else if (row) {
-      totalProducts = num(row.count);
-    }
-    finish();
-  });
-});
-
-// ============================================
-// FIXED: MONTHLY SALES REPORT
-// ============================================
-app.get("/api/reports/monthly-sales", (req, res) => {
-  console.log("📈 Building monthly sales report...");
-
-  const sql = `
-    SELECT
-      DatePart('yyyy', o.ORDER_DATE) as year,
-      DatePart('m', o.ORDER_DATE) as month,
-      SUM(od.QTY_ORDER * od.PRICE) as revenue,
-      COUNT(DISTINCT o.OR_ID) as orders,
-      SUM(od.QTY_ORDER * (od.PRICE - p.BUYIN_PRICE)) as profit
-    FROM TBL_ORDERS o
-    INNER JOIN TBL_ORDERS_DETAILS od ON o.OR_ID = od.OR_ID
-    INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
-    GROUP BY DatePart('yyyy', o.ORDER_DATE), DatePart('m', o.ORDER_DATE)
-    ORDER BY DatePart('yyyy', o.ORDER_DATE) ASC, DatePart('m', o.ORDER_DATE) ASC
-  `;
-
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Monthly sales report error:", err.message);
-      return res.status(500).json([]);
-    }
-    res.json(
-      rows.map((r) => ({
-        month: `${MONTH_NAMES[(r.month || 1) - 1]} ${r.year || ""}`.trim(),
-        revenue: num(r.revenue),
-        orders: num(r.orders),
-        profit: num(r.profit),
-      }))
-    );
-  });
-});
-
-// ============================================
-// FIXED: PRODUCT PERFORMANCE REPORT
-// ============================================
-app.get("/api/reports/product-performance", (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-  console.log(`📈 Building product performance report (top ${limit})...`);
-
-  const sql = `
-    SELECT TOP ${limit}
-      p.NAME_EN as name,
-      SUM(od.QTY_ORDER) as sales,
-      SUM(od.QTY_ORDER * od.PRICE) as revenue,
-      SUM(od.QTY_ORDER * (od.PRICE - p.BUYIN_PRICE)) as profit
-    FROM TBL_ORDERS_DETAILS od
-    INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
-    GROUP BY p.NAME_EN
-    ORDER BY SUM(od.QTY_ORDER) DESC
-  `;
-
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Product performance report error:", err.message);
-      return res.status(500).json([]);
-    }
-    res.json(
-      rows.map((r) => ({
-        name: r.name || "Unknown",
-        sales: num(r.sales),
-        revenue: num(r.revenue),
-        profit: num(r.profit),
-      }))
-    );
-  });
-});
-
-// ============================================
-// FIXED: CUSTOMER ANALYTICS REPORT
-// ============================================
-app.get("/api/reports/customer-analytics", (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-  console.log(`📈 Building customer analytics report (top ${limit})...`);
-
-  const sql = `
-    SELECT TOP ${limit}
-      c.FIRST_NAME & ' ' & c.LAST_NAME as name,
-      COUNT(o.OR_ID) as orders,
-      SUM(o.AMOUNT_US) as totalSpent,
-      MAX(o.ORDER_DATE) as lastOrder
-    FROM TBL_CUSTOMERS c
-    INNER JOIN TBL_ORDERS o ON c.ID = o.CUSTOMER_ID
-    GROUP BY c.FIRST_NAME, c.LAST_NAME
-    ORDER BY SUM(o.AMOUNT_US) DESC
-  `;
-
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Customer analytics report error:", err.message);
-      return res.status(500).json([]);
-    }
-    res.json(
-      rows.map((r) => {
-        const orders = num(r.orders);
-        const totalSpent = num(r.totalSpent);
-        return {
-          name: (r.name || "Unknown").trim(),
-          orders: orders,
-          totalSpent: totalSpent,
-          avgOrder: orders > 0 ? totalSpent / orders : 0,
-          lastOrder: r.lastOrder,
-        };
-      })
-    );
-  });
-});
-
-// ============================================
-// FIXED: REVENUE SUMMARY REPORT
-// ============================================
-app.get("/api/reports/revenue-summary", (req, res) => {
-  console.log("📈 Building revenue summary report...");
-
-  // ✅ FIXED: Use Access date functions
-  const currentSql = `
-    SELECT 
-      SUM(AMOUNT_US) as revenue, 
-      COUNT(*) as orders
-    FROM TBL_ORDERS
-    WHERE ORDER_DATE >= DateAdd('d', -30, Date())
-  `;
-  
-  const previousSql = `
-    SELECT 
-      SUM(AMOUNT_US) as revenue, 
-      COUNT(*) as orders
-    FROM TBL_ORDERS
-    WHERE ORDER_DATE >= DateAdd('d', -60, Date()) 
-    AND ORDER_DATE < DateAdd('d', -30, Date())
-  `;
-  
-  const customersCurrentSql = `
-    SELECT COUNT(*) as count FROM TBL_CUSTOMERS 
-    WHERE CREATED_DA >= DateAdd('d', -30, Date())
-  `;
-  
-  const customersPreviousSql = `
-    SELECT COUNT(*) as count FROM TBL_CUSTOMERS
-    WHERE CREATED_DA >= DateAdd('d', -60, Date()) 
-    AND CREATED_DA < DateAdd('d', -30, Date())
-  `;
-  
-  const totalCustomersSql = `SELECT COUNT(*) as count FROM TBL_CUSTOMERS`;
-
-  let completed = 0;
-  const total = 5;
-  let currentRevenue = 0;
-  let currentOrders = 0;
-  let previousRevenue = 0;
-  let previousOrders = 0;
-  let custCurrentCount = 0;
-  let custPreviousCount = 0;
-  let totalCustomers = 0;
-
-  const finish = () => {
-    completed++;
-    if (completed !== total) return;
-
-    res.json({
-      totalRevenue: currentRevenue,
-      totalOrders: currentOrders,
-      totalCustomers: totalCustomers,
-      avgOrderValue: currentOrders > 0 ? currentRevenue / currentOrders : 0,
-      revenueGrowth: growthPct(currentRevenue, previousRevenue),
-      orderGrowth: growthPct(currentOrders, previousOrders),
-      customerGrowth: growthPct(custCurrentCount, custPreviousCount),
-    });
-  };
-
-  dbModule.get(currentSql, [], (err, row) => {
-    if (err) console.error("❌ Revenue summary current error:", err.message);
-    else if (row) {
-      currentRevenue = num(row.revenue);
-      currentOrders = num(row.orders);
-    }
-    finish();
-  });
-
-  dbModule.get(previousSql, [], (err, row) => {
-    if (err) console.error("❌ Revenue summary previous error:", err.message);
-    else if (row) {
-      previousRevenue = num(row.revenue);
-      previousOrders = num(row.orders);
-    }
-    finish();
-  });
-
-  dbModule.get(customersCurrentSql, [], (err, row) => {
-    if (err) console.error("❌ Customers current error:", err.message);
-    else if (row) custCurrentCount = num(row.count);
-    finish();
-  });
-
-  dbModule.get(customersPreviousSql, [], (err, row) => {
-    if (err) console.error("❌ Customers previous error:", err.message);
-    else if (row) custPreviousCount = num(row.count);
-    finish();
-  });
-
-  dbModule.get(totalCustomersSql, [], (err, row) => {
-    if (err) console.error("❌ Total customers error:", err.message);
-    else if (row) totalCustomers = num(row.count);
+    if (!err && row) { totalProducts = num(row.count); }
     finish();
   });
 });
@@ -1795,187 +1243,140 @@ app.get("/api/reports/revenue-summary", (req, res) => {
 
 app.get("/api/reports/monthly-sales", (req, res) => {
   console.log("📈 Building monthly sales report...");
-
   const sql = `
-    SELECT
-      DatePart('yyyy', o.ORDER_DATE) as year,
-      DatePart('m', o.ORDER_DATE) as month,
-      SUM(od.QTY_ORDER * od.PRICE) as revenue,
-      COUNT(DISTINCT o.OR_ID) as orders,
-      SUM(od.QTY_ORDER * (od.PRICE - p.BUYIN_PRICE)) as profit
+    SELECT DatePart('yyyy', o.ORDER_DATE) as year, DatePart('m', o.ORDER_DATE) as month,
+           SUM(od.QTY_ORDER * od.PRICE) as revenue,
+           COUNT(DISTINCT o.OR_ID) as orders,
+           SUM(od.QTY_ORDER * (od.PRICE - p.BUYIN_PRICE)) as profit
     FROM TBL_ORDERS o
     INNER JOIN TBL_ORDERS_DETAILS od ON o.OR_ID = od.OR_ID
     INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
     GROUP BY DatePart('yyyy', o.ORDER_DATE), DatePart('m', o.ORDER_DATE)
     ORDER BY DatePart('yyyy', o.ORDER_DATE) ASC, DatePart('m', o.ORDER_DATE) ASC
   `;
-
   dbModule.all(sql, [], (err, rows) => {
     if (err) {
       console.error("❌ Monthly sales report error:", err.message);
       return res.status(500).json([]);
     }
-    res.json(
-      rows.map((r) => ({
-        month: `${MONTH_NAMES[(r.month || 1) - 1]} ${r.year || ""}`.trim(),
-        revenue: num(r.revenue),
-        orders: num(r.orders),
-        profit: num(r.profit),
-      }))
-    );
+    res.json(rows.map((r) => ({
+      month: `${MONTH_NAMES[(r.month || 1) - 1]} ${r.year || ""}`.trim(),
+      revenue: num(r.revenue),
+      orders: num(r.orders),
+      profit: num(r.profit),
+    })));
   });
 });
 
 app.get("/api/reports/product-performance", (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   console.log(`📈 Building product performance report (top ${limit})...`);
-
   const sql = `
-    SELECT TOP ${limit}
-      p.NAME_EN as name,
-      SUM(od.QTY_ORDER) as sales,
-      SUM(od.QTY_ORDER * od.PRICE) as revenue,
-      SUM(od.QTY_ORDER * (od.PRICE - p.BUYIN_PRICE)) as profit
+    SELECT TOP ${limit} p.NAME_EN as name,
+           SUM(od.QTY_ORDER) as sales,
+           SUM(od.QTY_ORDER * od.PRICE) as revenue,
+           SUM(od.QTY_ORDER * (od.PRICE - p.BUYIN_PRICE)) as profit
     FROM TBL_ORDERS_DETAILS od
     INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
     GROUP BY p.NAME_EN
     ORDER BY SUM(od.QTY_ORDER) DESC
   `;
-
   dbModule.all(sql, [], (err, rows) => {
     if (err) {
       console.error("❌ Product performance report error:", err.message);
       return res.status(500).json([]);
     }
-    res.json(
-      rows.map((r) => ({
-        name: r.name || "Unknown",
-        sales: num(r.sales),
-        revenue: num(r.revenue),
-        profit: num(r.profit),
-      }))
-    );
+    res.json(rows.map((r) => ({
+      name: r.name || "Unknown",
+      sales: num(r.sales),
+      revenue: num(r.revenue),
+      profit: num(r.profit),
+    })));
   });
 });
 
 app.get("/api/reports/customer-analytics", (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   console.log(`📈 Building customer analytics report (top ${limit})...`);
-
   const sql = `
-    SELECT TOP ${limit}
-      c.FIRST_NAME & ' ' & c.LAST_NAME as name,
-      COUNT(o.OR_ID) as orders,
-      SUM(o.AMOUNT_US) as totalSpent,
-      MAX(o.ORDER_DATE) as lastOrder
+    SELECT TOP ${limit} c.FIRST_NAME & ' ' & c.LAST_NAME as name,
+           COUNT(o.OR_ID) as orders,
+           SUM(o.AMOUNT_US) as totalSpent,
+           MAX(o.ORDER_DATE) as lastOrder
     FROM TBL_CUSTOMERS c
     INNER JOIN TBL_ORDERS o ON c.ID = o.CUSTOMER_ID
     GROUP BY c.FIRST_NAME, c.LAST_NAME
     ORDER BY SUM(o.AMOUNT_US) DESC
   `;
-
   dbModule.all(sql, [], (err, rows) => {
     if (err) {
       console.error("❌ Customer analytics report error:", err.message);
       return res.status(500).json([]);
     }
-    res.json(
-      rows.map((r) => {
-        const orders = num(r.orders);
-        const totalSpent = num(r.totalSpent);
-        return {
-          name: (r.name || "Unknown").trim(),
-          orders: orders,
-          totalSpent: totalSpent,
-          avgOrder: orders > 0 ? totalSpent / orders : 0,
-          lastOrder: r.lastOrder,
-        };
-      })
-    );
+    res.json(rows.map((r) => {
+      const orders = num(r.orders);
+      const totalSpent = num(r.totalSpent);
+      return {
+        name: (r.name || "Unknown").trim(),
+        orders: orders,
+        totalSpent: totalSpent,
+        avgOrder: orders > 0 ? totalSpent / orders : 0,
+        lastOrder: r.lastOrder,
+      };
+    }));
   });
 });
 
 app.get("/api/reports/revenue-summary", (req, res) => {
   console.log("📈 Building revenue summary report...");
 
-  const currentSql = `
-    SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders
-    FROM TBL_ORDERS
-    WHERE ORDER_DATE >= DateAdd('d', -30, Date())
-  `;
-  const previousSql = `
-    SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders
-    FROM TBL_ORDERS
-    WHERE ORDER_DATE >= DateAdd('d', -60, Date()) AND ORDER_DATE < DateAdd('d', -30, Date())
-  `;
-  const customersCurrentSql = `
-    SELECT COUNT(*) as count FROM TBL_CUSTOMERS 
-    WHERE CREATED_DA >= DateAdd('d', -30, Date())
-  `;
-  const customersPreviousSql = `
-    SELECT COUNT(*) as count FROM TBL_CUSTOMERS
-    WHERE CREATED_DA >= DateAdd('d', -60, Date()) AND CREATED_DA < DateAdd('d', -30, Date())
-  `;
+  const currentSql = `SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders FROM TBL_ORDERS WHERE ORDER_DATE >= DateAdd('d', -30, Date())`;
+  const previousSql = `SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders FROM TBL_ORDERS WHERE ORDER_DATE >= DateAdd('d', -60, Date()) AND ORDER_DATE < DateAdd('d', -30, Date())`;
+  const customersCurrentSql = `SELECT COUNT(*) as count FROM TBL_CUSTOMERS WHERE CREATED_DA >= DateAdd('d', -30, Date())`;
+  const customersPreviousSql = `SELECT COUNT(*) as count FROM TBL_CUSTOMERS WHERE CREATED_DA >= DateAdd('d', -60, Date()) AND CREATED_DA < DateAdd('d', -30, Date())`;
   const totalCustomersSql = `SELECT COUNT(*) as count FROM TBL_CUSTOMERS`;
 
   let completed = 0;
   const total = 5;
-  let currentRevenue = 0;
-  let currentOrders = 0;
-  let previousRevenue = 0;
-  let previousOrders = 0;
-  let custCurrentCount = 0;
-  let custPreviousCount = 0;
-  let totalCustomers = 0;
+  let currentRevenue = 0, currentOrders = 0, previousRevenue = 0, previousOrders = 0;
+  let custCurrentCount = 0, custPreviousCount = 0, totalCustomers = 0;
 
   const finish = () => {
     completed++;
     if (completed !== total) return;
-
     res.json({
       totalRevenue: currentRevenue,
       totalOrders: currentOrders,
       totalCustomers: totalCustomers,
       avgOrderValue: currentOrders > 0 ? currentRevenue / currentOrders : 0,
-      revenueGrowth: growthPct(currentRevenue, previousRevenue),
-      orderGrowth: growthPct(currentOrders, previousOrders),
-      customerGrowth: growthPct(custCurrentCount, custPreviousCount),
+      revenueGrowth: previousRevenue ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100) : 0,
+      orderGrowth: previousOrders ? Math.round(((currentOrders - previousOrders) / previousOrders) * 100) : 0,
+      customerGrowth: custPreviousCount ? Math.round(((custCurrentCount - custPreviousCount) / custPreviousCount) * 100) : 0,
     });
   };
 
   dbModule.get(currentSql, [], (err, row) => {
-    if (err) console.error("❌ Revenue summary current error:", err.message);
-    else if (row) {
-      currentRevenue = num(row.revenue);
-      currentOrders = num(row.orders);
-    }
+    if (!err && row) { currentRevenue = num(row.revenue); currentOrders = num(row.orders); }
     finish();
   });
 
   dbModule.get(previousSql, [], (err, row) => {
-    if (err) console.error("❌ Revenue summary previous error:", err.message);
-    else if (row) {
-      previousRevenue = num(row.revenue);
-      previousOrders = num(row.orders);
-    }
+    if (!err && row) { previousRevenue = num(row.revenue); previousOrders = num(row.orders); }
     finish();
   });
 
   dbModule.get(customersCurrentSql, [], (err, row) => {
-    if (err) console.error("❌ Customers current error:", err.message);
-    else if (row) custCurrentCount = num(row.count);
+    if (!err && row) { custCurrentCount = num(row.count); }
     finish();
   });
 
   dbModule.get(customersPreviousSql, [], (err, row) => {
-    if (err) console.error("❌ Customers previous error:", err.message);
-    else if (row) custPreviousCount = num(row.count);
+    if (!err && row) { custPreviousCount = num(row.count); }
     finish();
   });
 
   dbModule.get(totalCustomersSql, [], (err, row) => {
-    if (err) console.error("❌ Total customers error:", err.message);
-    else if (row) totalCustomers = num(row.count);
+    if (!err && row) { totalCustomers = num(row.count); }
     finish();
   });
 });
@@ -1986,47 +1387,36 @@ app.get("/api/reports/revenue-summary", (req, res) => {
 
 app.get("/api/users", (req, res) => {
   console.log("👥 Fetching users...");
-
-  dbModule.all(
-    "SELECT UserID, Username, FullName, Role, Status, CreatedAt FROM Tbl_Users",
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("❌ Users error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-
-      if (!rows || rows.length === 0) {
-        console.log("⚠️ No users found");
-        return res.json([]);
-      }
-
-      const mappedUsers = rows.map((user) => ({
-        user_id: user.UserID,
-        username: user.Username || "",
-        fullname: user.FullName || "",
-        role: user.Role || "Cashier",
-        role_id: user.Role === "Admin" ? 1 : user.Role === "Cashier" ? 2 : 3,
-        status: user.Status || "ACTIVE",
-        last_login: user.CreatedAt || null,
-      }));
-
-      console.log(`✅ Found ${mappedUsers.length} users`);
-      res.json(mappedUsers);
+  dbModule.all("SELECT UserID, Username, FullName, Role, Status, CreatedAt FROM Tbl_Users", [], (err, rows) => {
+    if (err) {
+      console.error("❌ Users error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    if (!rows || rows.length === 0) {
+      console.log("⚠️ No users found");
+      return res.json([]);
+    }
+    const mappedUsers = rows.map((user) => ({
+      user_id: user.UserID,
+      username: user.Username || "",
+      fullname: user.FullName || "",
+      role: user.Role || "Cashier",
+      role_id: user.Role === "Admin" ? 1 : user.Role === "Cashier" ? 2 : 3,
+      status: user.Status || "ACTIVE",
+      last_login: user.CreatedAt || null,
+    }));
+    console.log(`✅ Found ${mappedUsers.length} users`);
+    res.json(mappedUsers);
+  });
 });
 
 app.post("/api/users", (req, res) => {
   console.log("📝 Request body:", req.body);
-
   const { username, password, fullname, role_id } = req.body;
 
   if (!username || !password) {
     console.log("❌ Missing username or password");
-    return res
-      .status(400)
-      .json({ error: "Username and password are required" });
+    return res.status(400).json({ error: "Username and password are required" });
   }
 
   const roleMap = { 1: "Admin", 2: "Cashier", 3: "Viewer" };
@@ -2036,46 +1426,32 @@ app.post("/api/users", (req, res) => {
   const safePassword = password.replace(/'/g, "''");
   const safeFullname = (fullname || username).replace(/'/g, "''");
 
-  dbModule.get(
-    `SELECT UserID FROM Tbl_Users WHERE Username = '${safeUsername}'`,
-    [],
-    (err, existing) => {
+  dbModule.get(`SELECT UserID FROM Tbl_Users WHERE Username = '${safeUsername}'`, [], (err, existing) => {
+    if (err) {
+      console.error("❌ Check user error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+    if (existing) {
+      return res.status(400).json({ error: "Username already exists" });
+    }
+
+    const sql = `
+      INSERT INTO Tbl_Users (Username, Password, FullName, Role, Status) 
+      VALUES ('${safeUsername}', '${safePassword}', '${safeFullname}', '${role}', 'ACTIVE')
+    `;
+
+    console.log("📝 SQL:", sql);
+
+    dbModule.run(sql, [], function (err) {
       if (err) {
-        console.error("❌ Check user error:", err.message);
+        console.error("❌ Create user error:", err.message);
         return res.status(500).json({ error: err.message });
       }
-
-      if (existing) {
-        return res.status(400).json({ error: "Username already exists" });
-      }
-
-      const sql = `
-        INSERT INTO Tbl_Users (Username, Password, FullName, Role, Status) 
-        VALUES ('${safeUsername}', '${safePassword}', '${safeFullname}', '${role}', 'ACTIVE')
-      `;
-
-      console.log("📝 SQL:", sql);
-
-      dbModule.run(sql, [], function (err) {
-        if (err) {
-          console.error("❌ Create user error:", err.message);
-          return res.status(500).json({ error: err.message });
-        }
-
-        console.log("✅ User created with ID:", this.lastID);
-        logActivity(
-          req.body.user_id || 1,
-          "Created user",
-          "Tbl_Users",
-          this.lastID
-        );
-        res.json({
-          user_id: this.lastID,
-          message: "User created successfully",
-        });
-      });
-    }
-  );
+      console.log("✅ User created with ID:", this.lastID);
+      logActivity(req.body.user_id || 1, "Created user", "Tbl_Users", this.lastID);
+      res.json({ user_id: this.lastID, message: "User created successfully" });
+    });
+  });
 });
 
 app.put("/api/users/:id", (req, res) => {
@@ -2094,78 +1470,64 @@ app.put("/api/users/:id", (req, res) => {
   const safeUsername = username.replace(/'/g, "''");
   const safeFullname = (fullname || username).replace(/'/g, "''");
 
-  dbModule.get(
-    `SELECT UserID FROM Tbl_Users WHERE Username = '${safeUsername}' AND UserID != ${id}`,
-    [],
-    (err, existing) => {
+  dbModule.get(`SELECT UserID FROM Tbl_Users WHERE Username = '${safeUsername}' AND UserID != ${id}`, [], (err, existing) => {
+    if (err) {
+      console.error("❌ Check user error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+    if (existing) {
+      return res.status(400).json({ error: "Username already exists" });
+    }
+
+    let sql = `
+      UPDATE Tbl_Users 
+      SET Username = '${safeUsername}', FullName = '${safeFullname}', Role = '${role}'
+    `;
+
+    if (password && password.trim() !== "") {
+      const safePassword = password.replace(/'/g, "''");
+      sql += `, Password = '${safePassword}'`;
+    }
+
+    sql += ` WHERE UserID = ${id}`;
+
+    console.log("📝 SQL:", sql);
+
+    dbModule.run(sql, [], function (err) {
       if (err) {
-        console.error("❌ Check user error:", err.message);
+        console.error("❌ Update user error:", err.message);
         return res.status(500).json({ error: err.message });
       }
-
-      if (existing) {
-        return res.status(400).json({ error: "Username already exists" });
+      if (this.changes === 0) {
+        return res.status(404).json({ error: "User not found" });
       }
-
-      let sql = `
-        UPDATE Tbl_Users 
-        SET Username = '${safeUsername}', 
-            FullName = '${safeFullname}', 
-            Role = '${role}'
-      `;
-
-      if (password && password.trim() !== "") {
-        const safePassword = password.replace(/'/g, "''");
-        sql += `, Password = '${safePassword}'`;
-      }
-
-      sql += ` WHERE UserID = ${id}`;
-
-      console.log("📝 SQL:", sql);
-
-      dbModule.run(sql, [], function (err) {
-        if (err) {
-          console.error("❌ Update user error:", err.message);
-          return res.status(500).json({ error: err.message });
-        }
-        if (this.changes === 0) {
-          return res.status(404).json({ error: "User not found" });
-        }
-
-        console.log("✅ User updated, ID:", id);
-        logActivity(req.body.user_id || 1, "Updated user", "Tbl_Users", id);
-        res.json({ message: "User updated successfully" });
-      });
-    }
-  );
+      console.log("✅ User updated, ID:", id);
+      logActivity(req.body.user_id || 1, "Updated user", "Tbl_Users", id);
+      res.json({ message: "User updated successfully" });
+    });
+  });
 });
 
 app.delete("/api/users/:id", (req, res) => {
   const { id } = req.params;
-
   console.log("🗑️ Deleting user ID:", id);
 
   if (id == 1) {
     return res.status(400).json({ error: "Cannot delete the main admin user" });
   }
 
-  dbModule.run(
-    `DELETE FROM Tbl_Users WHERE UserID = ${id}`,
-    [],
-    function (err) {
-      if (err) {
-        console.error("❌ Delete user error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: "User not found" });
-      }
-
-      console.log("✅ User deleted, ID:", id);
-      logActivity(req.body.user_id || 1, "Deleted user", "Tbl_Users", id);
-      res.json({ message: "User deleted successfully" });
+  dbModule.run(`DELETE FROM Tbl_Users WHERE UserID = ${id}`, [], function (err) {
+    if (err) {
+      console.error("❌ Delete user error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    if (this.changes === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    console.log("✅ User deleted, ID:", id);
+    logActivity(req.body.user_id || 1, "Deleted user", "Tbl_Users", id);
+    res.json({ message: "User deleted successfully" });
+  });
 });
 
 // ============================================
@@ -2174,47 +1536,27 @@ app.delete("/api/users/:id", (req, res) => {
 
 app.get("/api/warranty", (req, res) => {
   console.log("🛡️ Fetching warranty records...");
-
-  dbModule.all(
-    "SELECT * FROM Tbl_Warranty ORDER BY WarrantyID DESC",
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("❌ Warranty error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log(`🛡️ Warranty records found: ${rows.length}`);
-      res.json(rows);
+  dbModule.all("SELECT * FROM Tbl_Warranty ORDER BY WarrantyID DESC", [], (err, rows) => {
+    if (err) {
+      console.error("❌ Warranty error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    console.log(`🛡️ Warranty records found: ${rows.length}`);
+    res.json(rows);
+  });
 });
 
 app.post("/api/warranty", (req, res) => {
-  const {
-    CustomerID,
-    ProductID,
-    SerialNumber,
-    WarrantyPeriod,
-    WarrantyStartDate,
-  } = req.body;
+  const { CustomerID, ProductID, SerialNumber, WarrantyPeriod, WarrantyStartDate } = req.body;
 
   const startDate = new Date(WarrantyStartDate);
   const endDate = new Date(startDate);
   endDate.setMonth(endDate.getMonth() + Number(WarrantyPeriod || 12));
 
   const sql = `
-    INSERT INTO Tbl_Warranty (
-      CustomerID, ProductID, SerialNumber, WarrantyPeriod, 
-      WarrantyStartDate, WarrantyEndDate, Status
-    ) VALUES (
-      '${CustomerID}', 
-      '${ProductID}', 
-      '${(SerialNumber || "").replace(/'/g, "''")}', 
-      ${Number(WarrantyPeriod) || 12},
-      '${WarrantyStartDate}', 
-      '${endDate.toISOString().split("T")[0]}',
-      'Active'
-    )
+    INSERT INTO Tbl_Warranty (CustomerID, ProductID, SerialNumber, WarrantyPeriod, WarrantyStartDate, WarrantyEndDate, Status)
+    VALUES ('${CustomerID}', '${ProductID}', '${(SerialNumber || "").replace(/'/g, "''")}', ${Number(WarrantyPeriod) || 12},
+            '${WarrantyStartDate}', '${endDate.toISOString().split("T")[0]}', 'Active')
   `;
 
   dbModule.run(sql, [], function (err) {
@@ -2222,10 +1564,7 @@ app.post("/api/warranty", (req, res) => {
       console.error("❌ Create warranty error:", err.message);
       return res.status(500).json({ error: err.message });
     }
-    res.json({
-      warranty_id: this.lastID,
-      message: "Warranty created successfully",
-    });
+    res.json({ warranty_id: this.lastID, message: "Warranty created successfully" });
   });
 });
 
@@ -2235,51 +1574,27 @@ app.post("/api/warranty", (req, res) => {
 
 app.get("/api/services", (req, res) => {
   console.log("🔧 Fetching service requests...");
-
-  dbModule.all(
-    "SELECT * FROM Tbl_Service_Requests ORDER BY ServiceID DESC",
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("❌ Services error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log(`🔧 Service requests found: ${rows.length}`);
-      res.json(rows);
+  dbModule.all("SELECT * FROM Tbl_Service_Requests ORDER BY ServiceID DESC", [], (err, rows) => {
+    if (err) {
+      console.error("❌ Services error:", err.message);
+      return res.status(500).json({ error: err.message });
     }
-  );
+    console.log(`🔧 Service requests found: ${rows.length}`);
+    res.json(rows);
+  });
 });
 
 app.post("/api/services", (req, res) => {
-  const {
-    CustomerID,
-    ProductID,
-    SerialNumber,
-    WarrantyID,
-    IssueDescription,
-    ServiceType,
-    Status,
-    EstimatedCost,
-  } = req.body;
+  const { CustomerID, ProductID, SerialNumber, WarrantyID, IssueDescription, ServiceType, Status, EstimatedCost } = req.body;
 
   const serviceNo = `SRV-${Date.now()}`;
 
   const sql = `
-    INSERT INTO Tbl_Service_Requests (
-      ServiceNo, CustomerID, ProductID, SerialNumber, WarrantyID,
-      IssueDescription, ServiceType, Status, ReceivedDate, EstimatedCost
-    ) VALUES (
-      '${serviceNo}', 
-      '${CustomerID}', 
-      '${ProductID}', 
-      '${(SerialNumber || "").replace(/'/g, "''")}', 
-      '${WarrantyID || "NULL"}',
-      '${(IssueDescription || "").replace(/'/g, "''")}', 
-      '${ServiceType || "Repair"}', 
-      '${Status || "PENDING"}', 
-      Date(), 
-      ${Number(EstimatedCost) || 0}
-    )
+    INSERT INTO Tbl_Service_Requests (ServiceNo, CustomerID, ProductID, SerialNumber, WarrantyID,
+      IssueDescription, ServiceType, Status, ReceivedDate, EstimatedCost)
+    VALUES ('${serviceNo}', '${CustomerID}', '${ProductID}', '${(SerialNumber || "").replace(/'/g, "''")}',
+            '${WarrantyID || "NULL"}', '${(IssueDescription || "").replace(/'/g, "''")}', '${ServiceType || "Repair"}',
+            '${Status || "PENDING"}', Date(), ${Number(EstimatedCost) || 0})
   `;
 
   dbModule.run(sql, [], function (err) {
@@ -2287,10 +1602,7 @@ app.post("/api/services", (req, res) => {
       console.error("❌ Create service error:", err.message);
       return res.status(500).json({ error: err.message });
     }
-    res.json({
-      service_id: this.lastID,
-      message: "Service request created successfully",
-    });
+    res.json({ service_id: this.lastID, message: "Service request created successfully" });
   });
 });
 
@@ -2300,29 +1612,15 @@ app.post("/api/services", (req, res) => {
 
 app.post("/api/payments/create-payment-intent", async (req, res) => {
   const { amount, orderId } = req.body;
-  res.json({
-    clientSecret: "mock_secret_" + Date.now(),
-    message: "Payment intent created (mock)",
-  });
+  res.json({ clientSecret: "mock_secret_" + Date.now(), message: "Payment intent created (mock)" });
 });
 
 app.post("/api/payments/record", (req, res) => {
   const { OR_ID, AMOUNT_US, AMOUNT_KH, REFERENCE_I, EMP_ID } = req.body;
 
   const sql = `
-    INSERT INTO TBL_PAYMENT (
-      OR_ID,
-      AMOUNT_US,
-      AMOUNT_KH,
-      PAY_DATE,
-      STATUS
-    ) VALUES (
-      ${Number(OR_ID)},
-      ${AMOUNT_US || 0},
-      ${AMOUNT_KH || 0},
-      Date(),
-      'COMPLETED'
-    )
+    INSERT INTO TBL_PAYMENT (OR_ID, AMOUNT_US, AMOUNT_KH, PAY_DATE, STATUS)
+    VALUES (${Number(OR_ID)}, ${AMOUNT_US || 0}, ${AMOUNT_KH || 0}, Date(), 'COMPLETED')
   `;
 
   dbModule.run(sql, [], function (err) {
@@ -2338,14 +1636,7 @@ app.post("/api/payments/record", (req, res) => {
 // PURCHASE
 // ============================================
 app.post("/api/purchase", (req, res) => {
-  const {
-    CUSTOMER_ID,
-    items,
-    DISCOUNT = 0,
-    STATUS = "Pending",
-    EMP_PREPARE = 1,
-    NOTES = "",
-  } = req.body;
+  const { CUSTOMER_ID, items, DISCOUNT = 0, STATUS = "Pending", EMP_PREPARE = 1, NOTES = "" } = req.body;
 
   console.log("📦 Processing purchase order...");
   console.log("📦 Customer ID:", CUSTOMER_ID);
@@ -2360,7 +1651,6 @@ app.post("/api/purchase", (req, res) => {
 
   const customerIdText = String(CUSTOMER_ID);
   const findCustomerSql = `SELECT ID, CUS_ID FROM TBL_CUSTOMERS WHERE CUS_ID = '${customerIdText}'`;
-  console.log("🔍 SQL:", findCustomerSql);
 
   dbModule.get(findCustomerSql, [], (err, customer) => {
     if (err) {
@@ -2370,15 +1660,11 @@ app.post("/api/purchase", (req, res) => {
 
     if (!customer) {
       console.error("❌ Customer not found:", CUSTOMER_ID);
-      return res.status(400).json({
-        error: `Customer with ID ${CUSTOMER_ID} not found`,
-      });
+      return res.status(400).json({ error: `Customer with ID ${CUSTOMER_ID} not found` });
     }
 
     const numericCustomerId = customer.ID;
-    console.log(
-      `✅ Customer found: ${customer.CUS_ID} with numeric ID: ${numericCustomerId}`
-    );
+    console.log(`✅ Customer found: ${customer.CUS_ID} with numeric ID: ${numericCustomerId}`);
 
     let productCheckCompleted = 0;
     const totalItems = items.length;
@@ -2386,28 +1672,16 @@ app.post("/api/purchase", (req, res) => {
     let errorMessages = [];
     const productIdMap = {};
 
-    if (totalItems === 0) {
-      return res.status(400).json({ error: "No items to process" });
-    }
-
     items.forEach((item) => {
       const productIdText = String(item.product_id || "");
 
-      if (
-        !productIdText ||
-        productIdText === "null" ||
-        productIdText === "undefined" ||
-        productIdText === ""
-      ) {
+      if (!productIdText || productIdText === "null" || productIdText === "undefined" || productIdText === "") {
         errorMessages.push(`Invalid product ID: ${productIdText}`);
         hasError = true;
         productCheckCompleted++;
         if (productCheckCompleted === totalItems) {
           if (hasError) {
-            return res.status(400).json({
-              error: "Invalid product IDs found",
-              details: errorMessages,
-            });
+            return res.status(400).json({ error: "Invalid product IDs found", details: errorMessages });
           }
           proceedWithOrder();
         }
@@ -2415,33 +1689,25 @@ app.post("/api/purchase", (req, res) => {
       }
 
       const checkProductSql = `SELECT ID, PRODUCT_ID FROM TBL_PRODUCTS WHERE PRODUCT_ID = '${productIdText}'`;
-      console.log("🔍 SQL:", checkProductSql);
 
       dbModule.get(checkProductSql, [], (err, product) => {
         if (err) {
           console.error("❌ Product check error:", err.message);
           hasError = true;
-          errorMessages.push(
-            `Error checking product ${productIdText}: ${err.message}`
-          );
+          errorMessages.push(`Error checking product ${productIdText}: ${err.message}`);
         } else if (!product) {
           console.error("❌ Product not found:", productIdText);
           hasError = true;
           errorMessages.push(`Product with ID ${productIdText} not found`);
         } else {
           productIdMap[productIdText] = product.ID;
-          console.log(
-            `✅ Product found: ${product.PRODUCT_ID} with numeric ID: ${product.ID}`
-          );
+          console.log(`✅ Product found: ${product.PRODUCT_ID} with numeric ID: ${product.ID}`);
         }
 
         productCheckCompleted++;
         if (productCheckCompleted === totalItems) {
           if (hasError) {
-            return res.status(400).json({
-              error: "Product validation failed",
-              details: errorMessages,
-            });
+            return res.status(400).json({ error: "Product validation failed", details: errorMessages });
           }
           proceedWithOrder();
         }
@@ -2452,7 +1718,6 @@ app.post("/api/purchase", (req, res) => {
       dbModule.serialize(() => {
         const orderNo = `PO-${Date.now()}`;
         let totalAmount = 0;
-        let discountAmount = 0;
 
         items.forEach((item) => {
           const qty = Number(item.qty) || 0;
@@ -2461,29 +1726,12 @@ app.post("/api/purchase", (req, res) => {
           totalAmount += qty * price - discount;
         });
 
-        discountAmount = Number(DISCOUNT) || 0;
+        const discountAmount = Number(DISCOUNT) || 0;
         totalAmount = Math.max(0, totalAmount - discountAmount);
 
         const orderSql = `
-          INSERT INTO TBL_ORDERS (
-            ORDER_NO, 
-            CUSTOMER_ID, 
-            ORDER_DATE, 
-            AMOUNT_US, 
-            STATUS,
-            EMP_PREPARE,
-            DISCOUNT,
-            NOTES
-          ) VALUES (
-            '${orderNo}',
-            ${numericCustomerId},
-            Date(),
-            ${totalAmount},
-            '${STATUS}',
-            ${EMP_PREPARE},
-            ${discountAmount},
-            '${(NOTES || "").replace(/'/g, "''")}'
-          )
+          INSERT INTO TBL_ORDERS (ORDER_NO, CUSTOMER_ID, ORDER_DATE, AMOUNT_US, STATUS, EMP_PREPARE, DISCOUNT, NOTES)
+          VALUES ('${orderNo}', ${numericCustomerId}, Date(), ${totalAmount}, '${STATUS}', ${EMP_PREPARE}, ${discountAmount}, '${(NOTES || "").replace(/'/g, "''")}')
         `;
 
         console.log("📝 SQL:", orderSql);
@@ -2491,10 +1739,7 @@ app.post("/api/purchase", (req, res) => {
         dbModule.run(orderSql, [], function (err) {
           if (err) {
             console.error("❌ Order creation error:", err.message);
-            return res.status(500).json({
-              error: "Failed to create order",
-              details: err.message,
-            });
+            return res.status(500).json({ error: "Failed to create order", details: err.message });
           }
 
           const orderId = this.lastID;
@@ -2506,15 +1751,6 @@ app.post("/api/purchase", (req, res) => {
           let completed = 0;
           const totalItemsCount = items.length;
 
-          if (totalItemsCount === 0) {
-            return res.json({
-              success: true,
-              order_no: orderNo,
-              order_id: orderId,
-              message: "Order created with no items",
-            });
-          }
-
           items.forEach((item) => {
             const productIdText = String(item.product_id || "");
             const qty = Number(item.qty) || 0;
@@ -2522,21 +1758,11 @@ app.post("/api/purchase", (req, res) => {
             const discount = Number(item.discount) || 0;
             const subtotal = qty * price - discount;
 
-            if (
-              !productIdText ||
-              productIdText === "null" ||
-              productIdText === "undefined" ||
-              productIdText === ""
-            ) {
+            if (!productIdText || productIdText === "null" || productIdText === "undefined" || productIdText === "") {
               console.warn("⚠️ Skipping item with invalid product ID");
               completed++;
               if (completed === totalItemsCount) {
-                res.json({
-                  success: true,
-                  order_no: orderNo,
-                  order_id: orderId,
-                  message: "Order created with warnings",
-                });
+                res.json({ success: true, order_no: orderNo, order_id: orderId, message: "Order created with warnings" });
               }
               return;
             }
@@ -2546,33 +1772,15 @@ app.post("/api/purchase", (req, res) => {
               console.warn(`⚠️ Product ${productIdText} not found in map`);
               completed++;
               if (completed === totalItemsCount) {
-                res.json({
-                  success: true,
-                  order_no: orderNo,
-                  order_id: orderId,
-                  message: "Order created with warnings",
-                });
+                res.json({ success: true, order_no: orderNo, order_id: orderId, message: "Order created with warnings" });
               }
               return;
             }
 
             const detailSql = `
-              INSERT INTO TBL_ORDERS_DETAILS (
-                OR_ID,
-                PRODUCT_ID,
-                QTY_ORDER,
-                PRICE,
-                SUBTOTAL
-              ) VALUES (
-                ${orderId},
-                ${numericProductId},
-                ${qty},
-                ${price},
-                ${subtotal}
-              )
+              INSERT INTO TBL_ORDERS_DETAILS (OR_ID, PRODUCT_ID, QTY_ORDER, PRICE, SUBTOTAL)
+              VALUES (${orderId}, ${numericProductId}, ${qty}, ${price}, ${subtotal})
             `;
-
-            console.log("📝 Detail SQL:", detailSql);
 
             dbModule.run(detailSql, [], function (err) {
               if (err) {
@@ -2580,14 +1788,9 @@ app.post("/api/purchase", (req, res) => {
               }
 
               const stockSql = `
-                UPDATE Tbl_Stock 
-                SET 
-                  QtyAvailable = QtyAvailable - ${qty},
-                  QtyInStock = QtyInStock - ${qty}
+                UPDATE Tbl_Stock SET QtyAvailable = QtyAvailable - ${qty}, QtyInStock = QtyInStock - ${qty}
                 WHERE ProductID = ${numericProductId}
               `;
-
-              console.log("📝 Stock SQL:", stockSql);
 
               dbModule.run(stockSql, [], function (err) {
                 if (err) {
@@ -2615,88 +1818,6 @@ app.post("/api/purchase", (req, res) => {
         }
       });
     }
-  });
-});
-
-// ============================================
-// GET TABLE STRUCTURE - DEBUG
-// ============================================
-app.get("/api/debug/table/:name", (req, res) => {
-  const { name } = req.params;
-  console.log(`🔍 Debugging table: ${name}`);
-
-  const checkTableSql = `SELECT COUNT(*) as count FROM ${name}`;
-
-  dbModule.get(checkTableSql, [], (err, countResult) => {
-    if (err) {
-      console.error("❌ Table not found or error:", err.message);
-
-      const tablesSql = `
-        SELECT Name 
-        FROM MSysObjects 
-        WHERE Type = 1 
-        AND Flags = 0
-        ORDER BY Name
-      `;
-
-      dbModule.all(tablesSql, [], (err2, tables) => {
-        if (err2) {
-          return res.status(404).json({
-            error: `Table '${name}' not found`,
-            message: err.message,
-            available_tables: [],
-          });
-        }
-
-        const tableNames = tables.map((t) => t.Name || t.name);
-        return res.status(404).json({
-          error: `Table '${name}' not found`,
-          message: err.message,
-          available_tables: tableNames || [],
-          suggestion: "Check for case sensitivity and spelling",
-        });
-      });
-      return;
-    }
-
-    const sampleSql = `SELECT * FROM ${name}`;
-
-    dbModule.all(sampleSql, [], (err2, rows) => {
-      if (err2) {
-        console.error("❌ Error getting sample:", err2.message);
-        return res.json({
-          table: name,
-          exists: true,
-          message: "Table exists but could not get sample data",
-          error: err2.message,
-          rowCount: countResult.count || 0,
-        });
-      }
-
-      if (!rows || rows.length === 0) {
-        return res.json({
-          table: name,
-          exists: true,
-          message: "Table exists but has no data",
-          rowCount: 0,
-          columns: [],
-        });
-      }
-
-      const columns = Object.keys(rows[0]);
-      console.log(`✅ Table '${name}' found with columns:`, columns);
-
-      const limitedRows = rows.slice(0, 100);
-
-      res.json({
-        table: name,
-        exists: true,
-        columns: columns,
-        sample: rows[0],
-        rowCount: countResult.count || 0,
-        data: limitedRows,
-      });
-    });
   });
 });
 
@@ -2729,53 +1850,49 @@ async function startServer() {
       console.log('📝 Data will be mocked');
     }
 
-    const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
-    
-    if (!isVercel) {
-      app.listen(PORT, () => {
-        console.log("🚀 SPMS Backend running on http://localhost:" + PORT);
-        console.log("📊 Test API: http://localhost:" + PORT + "/api/test");
-        
-        if (isConnected && conn) {
-          console.log("📁 Connected to Access database successfully!");
-        } else {
-          console.log("⚠️ Running in DEMO MODE - Some features may be limited");
-        }
-        
-        console.log("");
-        console.log("📋 Available Endpoints:");
-        console.log("  🔐 Auth:          POST /api/auth/login");
-        console.log("  👥 Customers:     GET/POST /api/customers");
-        console.log("  📦 Products:      GET/POST /api/products");
-        console.log("  🛒 Orders:        GET /api/orders");
-        console.log("  🛒 Pending:       GET /api/orders/pending (FIXED)");
-        console.log("  📋 Order:         GET /api/orders/:id (details)");
-        console.log("  📊 Low Stock:     GET /api/stock/low-stock (NEW)");
-        console.log("  💳 Payments:      GET /api/payment-methods");
-        console.log("  💰 Payment:       POST /api/payments/record");
-        console.log("  📊 Stock:         GET /api/stock");
-        console.log("  📊 Stock Product: GET /api/stock/product/:id");
-        console.log("  💳 Purchase:      POST /api/purchase");
-        console.log("  📋 Reports:       GET /api/reports/*");
-        console.log("  👤 Users:         GET /api/users");
-        console.log("  📝 Activity:      GET /api/activity-logs");
-        console.log("  🛡️ Warranty:      GET /api/warranty");
-        console.log("  🔧 Services:      GET /api/services");
-        console.log("  📊 Analytics:     GET /api/analytics/*");
-        console.log("  🔍 Debug:         GET /api/debug/table/:name");
-      });
-    }
+    app.listen(PORT, () => {
+      console.log("🚀 SPMS Backend running on http://localhost:" + PORT);
+      console.log("📊 Test API: http://localhost:" + PORT + "/api/test");
+      
+      if (isConnected && conn) {
+        console.log("📁 Connected to Access database successfully!");
+      } else {
+        console.log("⚠️ Running in DEMO MODE - Some features may be limited");
+      }
+      
+      console.log("");
+      console.log("📋 Available Endpoints:");
+      console.log("  🔐 Auth:          POST /api/auth/login");
+      console.log("  👥 Customers:     GET/POST /api/customers");
+      console.log("  📦 Products:      GET/POST /api/products");
+      console.log("  🛒 Orders:        GET /api/orders");
+      console.log("  🛒 Pending:       GET /api/orders/pending");
+      console.log("  📋 Order:         GET /api/orders/:id (details)");
+      console.log("  📊 Low Stock:     GET /api/stock/low-stock");
+      console.log("  💳 Payments:      GET /api/payment-methods");
+      console.log("  💰 Payment:       POST /api/payments/record");
+      console.log("  📊 Stock:         GET /api/stock");
+      console.log("  📊 Stock Product: GET /api/stock/product/:id");
+      console.log("  💳 Purchase:      POST /api/purchase");
+      console.log("  📋 Reports:       GET /api/reports/*");
+      console.log("  👤 Users:         GET /api/users");
+      console.log("  📝 Activity:      GET /api/activity-logs");
+      console.log("  🛡️ Warranty:      GET /api/warranty");
+      console.log("  🔧 Services:      GET /api/services");
+      console.log("  📊 Analytics:     GET /api/analytics/*");
+      console.log("  📈 Reports:       GET /api/reports/monthly-sales");
+      console.log("  📈 Reports:       GET /api/reports/product-performance");
+      console.log("  📈 Reports:       GET /api/reports/customer-analytics");
+      console.log("  📈 Reports:       GET /api/reports/revenue-summary");
+    });
   } catch (err) {
     console.error("❌ Server startup error:", err.message);
     console.log("⚠️ Server running in limited mode");
     
-    const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
-    if (!isVercel) {
-      app.listen(PORT, () => {
-        console.log("🚀 SPMS Backend running in LIMITED MODE on http://localhost:" + PORT);
-        console.log("⚠️ Database connection failed, some features may not work");
-      });
-    }
+    app.listen(PORT, () => {
+      console.log("🚀 SPMS Backend running in LIMITED MODE on http://localhost:" + PORT);
+      console.log("⚠️ Database connection failed, some features may not work");
+    });
   }
 }
 

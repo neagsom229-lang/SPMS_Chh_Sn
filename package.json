@@ -1,5 +1,5 @@
 {
-  "name": "spms-dashboard",
+  "name": "spms-chh-sn",
   "version": "1.0.0",
   "scripts": {
     "install:all": "npm install --prefix backend && npm install --prefix frontend",

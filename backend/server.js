@@ -20,9 +20,7 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
@@ -37,7 +35,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Enable pre-flight for all routes
+app.options('*', cors(corsOptions));
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -1015,9 +1013,10 @@ app.delete("/api/suppliers/:id", (req, res) => {
 });
 
 // ============================================
-// REPORTS API
+// REPORTS API - FIXED WITH ALL ENDPOINTS
 // ============================================
 
+// Customers Report
 app.get("/api/reports/customers", (req, res) => {
   console.log("📊 Generating Customer Report...");
   dbModule.all("SELECT * FROM TBL_CUSTOMERS WHERE STATUS = 'Active' ORDER BY FIRST_NAME, LAST_NAME", [], (err, rows) => {
@@ -1030,6 +1029,7 @@ app.get("/api/reports/customers", (req, res) => {
   });
 });
 
+// Products Report
 app.get("/api/reports/products", (req, res) => {
   console.log("📊 Generating Product Report...");
   const sql = `
@@ -1046,6 +1046,7 @@ app.get("/api/reports/products", (req, res) => {
   });
 });
 
+// Orders Report
 app.get("/api/reports/orders", (req, res) => {
   console.log("📊 Generating Order Report...");
   const sql = `SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as TOTAL_AMOUNT, STATUS FROM TBL_ORDERS ORDER BY ORDER_DATE DESC`;
@@ -1059,6 +1060,7 @@ app.get("/api/reports/orders", (req, res) => {
   });
 });
 
+// Stock Report
 app.get("/api/reports/stock", (req, res) => {
   console.log("📊 Generating Stock Report...");
   const sql = `
@@ -1073,6 +1075,169 @@ app.get("/api/reports/stock", (req, res) => {
     }
     console.log(`📊 Stock report: ${rows.length} records`);
     res.json(rows || []);
+  });
+});
+
+// SALES REPORT - NEW
+app.get("/api/reports/sales", (req, res) => {
+  console.log("📊 Generating Sales Report...");
+  const sql = `
+    SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as amount, STATUS
+    FROM TBL_ORDERS
+    ORDER BY ORDER_DATE DESC
+  `;
+  dbModule.all(sql, [], (err, rows) => {
+    if (err) {
+      console.error("❌ Sales report error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log(`📊 Sales report: ${rows.length} records`);
+    res.json(rows || []);
+  });
+});
+
+// INVENTORY REPORT - NEW
+app.get("/api/reports/inventory", (req, res) => {
+  console.log("📊 Generating Inventory Report...");
+  const sql = `
+    SELECT p.PRODUCT_ID, p.NAME_EN as product_name, s.QtyInStock, s.QtyAvailable, s.QtyReserved, p.SALEOUT_PRICE as price
+    FROM Tbl_Stock s LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID ORDER BY p.NAME_EN
+  `;
+  dbModule.all(sql, [], (err, rows) => {
+    if (err) {
+      console.error("❌ Inventory report error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+    console.log(`📊 Inventory report: ${rows.length} records`);
+    res.json(rows || []);
+  });
+});
+
+// MONTHLY SALES - NEW
+app.get("/api/reports/monthlySales", (req, res) => {
+  console.log("📈 Building monthly sales report...");
+  const sql = `
+    SELECT DatePart('yyyy', ORDER_DATE) as year, DatePart('m', ORDER_DATE) as month,
+           SUM(AMOUNT_US) as total, COUNT(*) as orders
+    FROM TBL_ORDERS
+    GROUP BY DatePart('yyyy', ORDER_DATE), DatePart('m', ORDER_DATE)
+    ORDER BY DatePart('yyyy', ORDER_DATE) ASC, DatePart('m', ORDER_DATE) ASC
+  `;
+  dbModule.all(sql, [], (err, rows) => {
+    if (err) {
+      console.error("❌ Monthly sales report error:", err.message);
+      return res.status(500).json([]);
+    }
+    const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    res.json(rows.map(r => ({
+      month: `${MONTH_NAMES[(r.month || 1) - 1]} ${r.year}`.trim(),
+      revenue: Number(r.total) || 0,
+      orders: Number(r.orders) || 0
+    })));
+  });
+});
+
+// PRODUCT PERFORMANCE - NEW
+app.get("/api/reports/productPerformance", (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  console.log(`📈 Building product performance report (top ${limit})...`);
+  const sql = `
+    SELECT TOP ${limit} p.NAME_EN as name,
+           SUM(od.QTY_ORDER) as sales,
+           SUM(od.QTY_ORDER * od.PRICE) as revenue
+    FROM TBL_ORDERS_DETAILS od
+    INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
+    GROUP BY p.NAME_EN
+    ORDER BY SUM(od.QTY_ORDER) DESC
+  `;
+  dbModule.all(sql, [], (err, rows) => {
+    if (err) {
+      console.error("❌ Product performance report error:", err.message);
+      return res.status(500).json([]);
+    }
+    res.json(rows.map(r => ({
+      name: r.name || "Unknown",
+      sales: Number(r.sales) || 0,
+      revenue: Number(r.revenue) || 0
+    })));
+  });
+});
+
+// CUSTOMER ANALYTICS - NEW
+app.get("/api/reports/customerAnalytics", (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+  console.log(`📈 Building customer analytics report (top ${limit})...`);
+  const sql = `
+    SELECT TOP ${limit} c.CUS_ID as id,
+           c.FIRST_NAME & ' ' & c.LAST_NAME as name,
+           COUNT(o.OR_ID) as orders,
+           SUM(o.AMOUNT_US) as totalSpent
+    FROM TBL_CUSTOMERS c
+    LEFT JOIN TBL_ORDERS o ON c.ID = o.CUSTOMER_ID
+    GROUP BY c.CUS_ID, c.FIRST_NAME, c.LAST_NAME
+    ORDER BY SUM(o.AMOUNT_US) DESC
+  `;
+  dbModule.all(sql, [], (err, rows) => {
+    if (err) {
+      console.error("❌ Customer analytics report error:", err.message);
+      return res.status(500).json([]);
+    }
+    res.json(rows.map(r => ({
+      id: r.id || "Unknown",
+      name: (r.name || "Unknown").trim(),
+      orders: Number(r.orders) || 0,
+      totalSpent: Number(r.totalSpent) || 0,
+      avgOrder: Number(r.orders) > 0 ? Number(r.totalSpent) / Number(r.orders) : 0
+    })));
+  });
+});
+
+// REVENUE SUMMARY - NEW
+app.get("/api/reports/revenueSummary", (req, res) => {
+  console.log("📈 Building revenue summary report...");
+  const currentSql = `SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders FROM TBL_ORDERS WHERE ORDER_DATE >= DateAdd('d', -30, Date())`;
+  const previousSql = `SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders FROM TBL_ORDERS WHERE ORDER_DATE >= DateAdd('d', -60, Date()) AND ORDER_DATE < DateAdd('d', -30, Date())`;
+  const totalCustomersSql = `SELECT COUNT(*) as count FROM TBL_CUSTOMERS`;
+  const totalProductsSql = `SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'`;
+
+  let completed = 0;
+  const total = 4;
+  let currentRevenue = 0, currentOrders = 0;
+  let previousRevenue = 0, previousOrders = 0;
+  let totalCustomers = 0, totalProducts = 0;
+
+  const finish = () => {
+    completed++;
+    if (completed !== total) return;
+    res.json({
+      totalRevenue: currentRevenue,
+      totalOrders: currentOrders,
+      totalCustomers: totalCustomers,
+      totalProducts: totalProducts,
+      avgOrderValue: currentOrders > 0 ? currentRevenue / currentOrders : 0,
+      revenueGrowth: previousRevenue ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100) : 0,
+      orderGrowth: previousOrders ? Math.round(((currentOrders - previousOrders) / previousOrders) * 100) : 0
+    });
+  };
+
+  dbModule.get(currentSql, [], (err, row) => {
+    if (!err && row) { currentRevenue = Number(row.revenue) || 0; currentOrders = Number(row.orders) || 0; }
+    finish();
+  });
+
+  dbModule.get(previousSql, [], (err, row) => {
+    if (!err && row) { previousRevenue = Number(row.revenue) || 0; previousOrders = Number(row.orders) || 0; }
+    finish();
+  });
+
+  dbModule.get(totalCustomersSql, [], (err, row) => {
+    if (!err && row) { totalCustomers = Number(row.count) || 0; }
+    finish();
+  });
+
+  dbModule.get(totalProductsSql, [], (err, row) => {
+    if (!err && row) { totalProducts = Number(row.count) || 0; }
+    finish();
   });
 });
 
@@ -1255,150 +1420,6 @@ app.get("/api/analytics/summary", (req, res) => {
 
   dbModule.get(productsSql, [], (err, row) => {
     if (!err && row) { totalProducts = num(row.count); }
-    finish();
-  });
-});
-
-// ============================================
-// REPORTS (for Analytics.jsx Reports tab)
-// ============================================
-
-app.get("/api/reports/monthly-sales", (req, res) => {
-  console.log("📈 Building monthly sales report...");
-  const sql = `
-    SELECT DatePart('yyyy', o.ORDER_DATE) as year, DatePart('m', o.ORDER_DATE) as month,
-           SUM(od.QTY_ORDER * od.PRICE) as revenue,
-           COUNT(DISTINCT o.OR_ID) as orders,
-           SUM(od.QTY_ORDER * (od.PRICE - p.BUYIN_PRICE)) as profit
-    FROM TBL_ORDERS o
-    INNER JOIN TBL_ORDERS_DETAILS od ON o.OR_ID = od.OR_ID
-    INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
-    GROUP BY DatePart('yyyy', o.ORDER_DATE), DatePart('m', o.ORDER_DATE)
-    ORDER BY DatePart('yyyy', o.ORDER_DATE) ASC, DatePart('m', o.ORDER_DATE) ASC
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Monthly sales report error:", err.message);
-      return res.status(500).json([]);
-    }
-    res.json(rows.map((r) => ({
-      month: `${MONTH_NAMES[(r.month || 1) - 1]} ${r.year || ""}`.trim(),
-      revenue: num(r.revenue),
-      orders: num(r.orders),
-      profit: num(r.profit),
-    })));
-  });
-});
-
-app.get("/api/reports/product-performance", (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-  console.log(`📈 Building product performance report (top ${limit})...`);
-  const sql = `
-    SELECT TOP ${limit} p.NAME_EN as name,
-           SUM(od.QTY_ORDER) as sales,
-           SUM(od.QTY_ORDER * od.PRICE) as revenue,
-           SUM(od.QTY_ORDER * (od.PRICE - p.BUYIN_PRICE)) as profit
-    FROM TBL_ORDERS_DETAILS od
-    INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
-    GROUP BY p.NAME_EN
-    ORDER BY SUM(od.QTY_ORDER) DESC
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Product performance report error:", err.message);
-      return res.status(500).json([]);
-    }
-    res.json(rows.map((r) => ({
-      name: r.name || "Unknown",
-      sales: num(r.sales),
-      revenue: num(r.revenue),
-      profit: num(r.profit),
-    })));
-  });
-});
-
-app.get("/api/reports/customer-analytics", (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 20, 50);
-  console.log(`📈 Building customer analytics report (top ${limit})...`);
-  const sql = `
-    SELECT TOP ${limit} c.FIRST_NAME & ' ' & c.LAST_NAME as name,
-           COUNT(o.OR_ID) as orders,
-           SUM(o.AMOUNT_US) as totalSpent,
-           MAX(o.ORDER_DATE) as lastOrder
-    FROM TBL_CUSTOMERS c
-    INNER JOIN TBL_ORDERS o ON c.ID = o.CUSTOMER_ID
-    GROUP BY c.FIRST_NAME, c.LAST_NAME
-    ORDER BY SUM(o.AMOUNT_US) DESC
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Customer analytics report error:", err.message);
-      return res.status(500).json([]);
-    }
-    res.json(rows.map((r) => {
-      const orders = num(r.orders);
-      const totalSpent = num(r.totalSpent);
-      return {
-        name: (r.name || "Unknown").trim(),
-        orders: orders,
-        totalSpent: totalSpent,
-        avgOrder: orders > 0 ? totalSpent / orders : 0,
-        lastOrder: r.lastOrder,
-      };
-    }));
-  });
-});
-
-app.get("/api/reports/revenue-summary", (req, res) => {
-  console.log("📈 Building revenue summary report...");
-
-  const currentSql = `SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders FROM TBL_ORDERS WHERE ORDER_DATE >= DateAdd('d', -30, Date())`;
-  const previousSql = `SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders FROM TBL_ORDERS WHERE ORDER_DATE >= DateAdd('d', -60, Date()) AND ORDER_DATE < DateAdd('d', -30, Date())`;
-  const customersCurrentSql = `SELECT COUNT(*) as count FROM TBL_CUSTOMERS WHERE CREATED_DA >= DateAdd('d', -30, Date())`;
-  const customersPreviousSql = `SELECT COUNT(*) as count FROM TBL_CUSTOMERS WHERE CREATED_DA >= DateAdd('d', -60, Date()) AND CREATED_DA < DateAdd('d', -30, Date())`;
-  const totalCustomersSql = `SELECT COUNT(*) as count FROM TBL_CUSTOMERS`;
-
-  let completed = 0;
-  const total = 5;
-  let currentRevenue = 0, currentOrders = 0, previousRevenue = 0, previousOrders = 0;
-  let custCurrentCount = 0, custPreviousCount = 0, totalCustomers = 0;
-
-  const finish = () => {
-    completed++;
-    if (completed !== total) return;
-    res.json({
-      totalRevenue: currentRevenue,
-      totalOrders: currentOrders,
-      totalCustomers: totalCustomers,
-      avgOrderValue: currentOrders > 0 ? currentRevenue / currentOrders : 0,
-      revenueGrowth: previousRevenue ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100) : 0,
-      orderGrowth: previousOrders ? Math.round(((currentOrders - previousOrders) / previousOrders) * 100) : 0,
-      customerGrowth: custPreviousCount ? Math.round(((custCurrentCount - custPreviousCount) / custPreviousCount) * 100) : 0,
-    });
-  };
-
-  dbModule.get(currentSql, [], (err, row) => {
-    if (!err && row) { currentRevenue = num(row.revenue); currentOrders = num(row.orders); }
-    finish();
-  });
-
-  dbModule.get(previousSql, [], (err, row) => {
-    if (!err && row) { previousRevenue = num(row.revenue); previousOrders = num(row.orders); }
-    finish();
-  });
-
-  dbModule.get(customersCurrentSql, [], (err, row) => {
-    if (!err && row) { custCurrentCount = num(row.count); }
-    finish();
-  });
-
-  dbModule.get(customersPreviousSql, [], (err, row) => {
-    if (!err && row) { custPreviousCount = num(row.count); }
-    finish();
-  });
-
-  dbModule.get(totalCustomersSql, [], (err, row) => {
-    if (!err && row) { totalCustomers = num(row.count); }
     finish();
   });
 });
@@ -1906,6 +1927,8 @@ async function startServer() {
       console.log("  📈 Reports:       GET /api/reports/product-performance");
       console.log("  📈 Reports:       GET /api/reports/customer-analytics");
       console.log("  📈 Reports:       GET /api/reports/revenue-summary");
+      console.log("  📈 Reports:       GET /api/reports/sales");
+      console.log("  📈 Reports:       GET /api/reports/inventory");
     });
   } catch (err) {
     console.error("❌ Server startup error:", err.message);

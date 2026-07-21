@@ -22,8 +22,7 @@ out/
 *.accdb.lock
 *.mdb
 *.mdb.lock
-database/*.accdb
-database/*.mdb
+
 
 # IDE
 .vscode/

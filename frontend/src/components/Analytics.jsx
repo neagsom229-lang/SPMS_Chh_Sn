@@ -20,7 +20,8 @@ import {
   Grid, Layers, GitBranch, Workflow, Zap as ZapIcon,
   Globe, Heart, Coffee, Sun, Moon, Cloud,
   Move, ArrowRight, ArrowLeft, CornerDownRight,
-  CircleDot, Square, Diamond, Hexagon, Octagon
+  CircleDot, Square, Diamond, Hexagon, Octagon,
+  X  // ← ADD THIS LINE
 } from 'lucide-react';
 
 // ============================================

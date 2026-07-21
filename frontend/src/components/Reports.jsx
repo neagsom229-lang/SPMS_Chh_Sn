@@ -4,7 +4,7 @@ import {
   FileText, Download, Printer, RefreshCw, 
   AlertCircle, CheckCircle, Loader2, Database,
   TrendingUp, Package, Users, ShoppingBag,
-  Calendar, Filter, ChevronDown, X, Eye,
+  Calendar, Filter, ChevronDown, X, Eye,  // ← X is here ✅
   Clock, Award, Star, Zap, Activity, 
   BarChart3, PieChart, LineChart as LineChartIcon,
   ArrowUp, ArrowDown, Grid3x3, List,

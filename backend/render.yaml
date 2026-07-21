@@ -4,7 +4,7 @@ services:
     runtime: node
     repo: https://github.com/neagsom229-lang/SPMS_Chh_Sn
     plan: free
-    region: oregon
+    region: singapore
     buildCommand: npm install
     startCommand: node server.js
     rootDir: backend

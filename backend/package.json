@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "build": "echo 'No build step required'",
+    "build": "npm install --production",
     "test": "echo 'No tests specified'"
   },
   "dependencies": {
@@ -22,8 +22,7 @@
     "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=18.0.0"
   },
   "keywords": [
     "spms",

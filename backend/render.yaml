@@ -15,7 +15,7 @@ services:
         value: 5000
       - key: CORS_ORIGIN
         value: https://spms-chh-sn-pro.vercel.app
-      - key: RENDER
-        value: true
       - key: DB_PATH
         value: ./database/spms.accdb
+      - key: RENDER
+        value: true

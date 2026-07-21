@@ -5,8 +5,8 @@ services:
     repo: https://github.com/neagsom229-lang/SPMS_Chh_Sn
     plan: free
     region: singapore
-    buildCommand: npm install
-    startCommand: node server.js
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && node server.js
     rootDir: backend
     envVars:
       - key: NODE_ENV
@@ -15,3 +15,7 @@ services:
         value: 5000
       - key: CORS_ORIGIN
         value: https://spms-chh-sn-pro.vercel.app
+      - key: RENDER
+        value: true
+      - key: DB_PATH
+        value: ./database/spms.accdb

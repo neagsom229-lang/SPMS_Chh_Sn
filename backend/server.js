@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ============================================
-// CORS CONFIGURATION - Allow frontend
+// CORS CONFIGURATION
 // ============================================
 const corsOptions = {
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
@@ -20,6 +20,10 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+console.log('📊 Using Microsoft Access Database');
+
+// ... rest of your server code
 
 // ... rest of your server code
 const express = require("express");

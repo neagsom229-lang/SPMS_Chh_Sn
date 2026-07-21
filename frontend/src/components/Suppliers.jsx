@@ -7,7 +7,8 @@ import {
   Clock, Award, Star, CheckCircle, AlertCircle,
   Eye, Layers, Box, Briefcase, Globe, Shield,
   Download, Printer, DollarSign, TrendingUp,
-  AlertTriangle, ChevronRight, Zap, Activity
+  AlertTriangle, ChevronRight, Zap, Activity,
+  FileText, Loader2  // ← ADDED
 } from 'lucide-react';
 
 // ============================================

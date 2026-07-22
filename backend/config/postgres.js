@@ -1,16 +1,29 @@
 const { Pool } = require('pg');
+const dns = require('dns');
+
+// Force IPv4
+dns.setDefaultResultOrder('ipv4first');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
   },
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 15000,
+  // Force IPv4
   family: 4,
   keepAlive: true,
 });
 
-// ✅ FIXED: Better query handling
+// Log connection attempts
+pool.on('connect', () => {
+  console.log('✅ PostgreSQL connected successfully');
+});
+
+pool.on('error', (err) => {
+  console.error('❌ PostgreSQL pool error:', err.message);
+});
+
 const db = {
   query: async (text, params) => {
     try {
@@ -33,15 +46,5 @@ const db = {
     try { await pool.end(); } catch (e) {}
   }
 };
-
-// Test connection on startup
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('❌ PostgreSQL connection error:', err.message);
-  } else {
-    console.log('✅ PostgreSQL connected successfully');
-    release();
-  }
-});
 
 module.exports = db;

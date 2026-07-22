@@ -14,16 +14,13 @@ const PORT = process.env.PORT || 5000;
 // CORS CONFIGURATION - FIXED ✅
 // ============================================
 const allowedOrigins = [
-  // Production Vercel URLs
   'https://spms-chh-sn-pro.vercel.app',
   'https://spms-chh-sn-new.vercel.app',
   'https://spms-chh-sn.vercel.app',
   'https://chheangsamnangs-projects.vercel.app',
   'https://spms-chh-sn-git-main-chheangsamnangs-projects.vercel.app',
   'https://spms-chh-sn.onrender.com',
-  // ✅ Allow ANY Vercel URL (fixes CORS for new deployments)
   /\.vercel\.app$/,
-  // Local development
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:5000',
@@ -31,27 +28,16 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    // Check if origin is allowed (string match or regex match)
+    if (!origin) return callback(null, true);
     const isAllowed = allowedOrigins.some(allowed => {
-      if (typeof allowed === 'string') {
-        return allowed === origin;
-      }
-      if (allowed instanceof RegExp) {
-        return allowed.test(origin);
-      }
+      if (typeof allowed === 'string') return allowed === origin;
+      if (allowed instanceof RegExp) return allowed.test(origin);
       return false;
     });
-    
     if (isAllowed) {
       callback(null, true);
     } else {
       console.log('❌ CORS blocked origin:', origin);
-      // ✅ Allow all for testing
       callback(null, true);
     }
   },
@@ -71,20 +57,18 @@ console.log('📊 Using PostgreSQL Database');
 console.log('✅ CORS allowed origins:', allowedOrigins);
 
 // ============================================
-// DATABASE TEST ENDPOINT - SINGLE DEFINITION ✅
+// DATABASE TEST ENDPOINT
 // ============================================
 app.get("/api/db-test", async (req, res) => {
   try {
     console.log("🔍 Testing database connection...");
     const result = await db.query("SELECT NOW() as time, current_database() as db");
-    
     const tables = await db.query(`
       SELECT table_name 
       FROM information_schema.tables 
       WHERE table_schema = 'public'
       ORDER BY table_name
     `);
-    
     res.json({
       success: true,
       connected: true,
@@ -131,32 +115,18 @@ const logActivity = (userId, action, tableName, recordId = null) => {
 };
 
 // ============================================
-// HELPER FUNCTIONS FOR POSTGRESQL
-// ============================================
-function toPostgresArray(items) {
-  if (!items || !Array.isArray(items)) return '[]';
-  return JSON.stringify(items);
-}
-
-function fromPostgresArray(data) {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  try { return JSON.parse(data); } catch { return []; }
-}
-
-// ============================================
 // ACTIVITY LOGS
 // ============================================
 app.get("/api/activity-logs", async (req, res) => {
   const { limit = 50 } = req.query;
   const logs = activityLogs.slice(0, Number(limit));
-  
   try {
-    const result = await db.query("SELECT UserID, Username FROM Tbl_Users");
+    // ✅ FIXED: Use lowercase column names
+    const result = await db.query("SELECT userid, username FROM tbl_users");
     const users = result.rows || [];
     const userMap = {};
     users.forEach((u) => {
-      userMap[u.UserID] = u.Username;
+      userMap[u.userid] = u.username;
     });
     logs.forEach((log) => {
       log.username = userMap[log.user_id] || "Unknown";
@@ -174,7 +144,7 @@ app.delete("/api/activity-logs", (req, res) => {
 });
 
 // ============================================
-// AUTHENTICATION - FIXED ✅
+// AUTHENTICATION - FIXED ✅ (Uppercase to Lowercase)
 // ============================================
 app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body;
@@ -185,10 +155,11 @@ app.post("/api/auth/login", async (req, res) => {
   }
 
   try {
+    // ✅ FIXED: Use lowercase column names (matching Neon.tech)
     const result = await db.query(
-      `SELECT UserID, Username, Password, FullName, Role, Status 
-       FROM Tbl_Users 
-       WHERE LOWER(Username) = LOWER($1) AND Status = 'ACTIVE'`,
+      `SELECT userid, username, password, fullname, role, status 
+       FROM tbl_users 
+       WHERE LOWER(username) = LOWER($1) AND status = 'ACTIVE'`,
       [username]
     );
 
@@ -199,23 +170,24 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    if (user.Password !== password) {
+    // ✅ FIXED: Check password (case-sensitive)
+    if (user.password !== password) {
       console.log("❌ Password incorrect for:", username);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     console.log("✅ Login successful:", username);
-    console.log("👤 Role:", user.Role);
+    console.log("👤 Role:", user.role);
 
-    logActivity(user.UserID, "Login", "Tbl_Users", user.UserID);
+    logActivity(user.userid, "Login", "tbl_users", user.userid);
 
     res.json({
-      user_id: user.UserID,
-      username: user.Username,
-      role: user.Role || "Cashier",
-      role_name: user.Role || "Cashier",
-      status: user.Status,
-      fullname: user.FullName || user.Username,
+      user_id: user.userid,
+      username: user.username,
+      role: user.role || "Cashier",
+      role_name: user.role || "Cashier",
+      status: user.status,
+      fullname: user.fullname || user.username,
     });
   } catch (err) {
     console.error("❌ Login error:", err.message);
@@ -224,17 +196,18 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 // ============================================
-// DASHBOARD STATS
+// DASHBOARD STATS - FIXED ✅ (Uppercase to Lowercase)
 // ============================================
 app.get("/api/dashboard/stats", async (req, res) => {
   try {
+    // ✅ FIXED: Use lowercase table names
     const queries = [
-      db.query("SELECT COUNT(*) as count FROM TBL_CUSTOMERS WHERE STATUS = 'Active'"),
-      db.query("SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'"),
-      db.query("SELECT COUNT(*) as count FROM TBL_ORDERS"),
-      db.query("SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue FROM TBL_ORDERS"),
-      db.query("SELECT COUNT(*) as count FROM Tbl_Stock WHERE QtyAvailable <= 5"),
-      db.query("SELECT COUNT(*) as count FROM TBL_ORDERS WHERE STATUS = 'Pending'")
+      db.query("SELECT COUNT(*) as count FROM tbl_customers WHERE status = 'Active'"),
+      db.query("SELECT COUNT(*) as count FROM tbl_products WHERE status = 'Active'"),
+      db.query("SELECT COUNT(*) as count FROM tbl_orders"),
+      db.query("SELECT COALESCE(SUM(amount_us), 0) as revenue FROM tbl_orders"),
+      db.query("SELECT COUNT(*) as count FROM tbl_stock WHERE qtyavailable <= 5"),
+      db.query("SELECT COUNT(*) as count FROM tbl_orders WHERE status = 'Pending'")
     ];
 
     const results = await Promise.all(queries);
@@ -256,15 +229,15 @@ app.get("/api/dashboard/stats", async (req, res) => {
 });
 
 // ============================================
-// CUSTOMERS (CRUD)
+// CUSTOMERS (CRUD) - FIXED ✅
 // ============================================
 app.get("/api/customers", async (req, res) => {
   const { search } = req.query;
-  let sql = "SELECT * FROM TBL_CUSTOMERS WHERE STATUS = 'Active'";
+  let sql = "SELECT * FROM tbl_customers WHERE status = 'Active'";
   const params = [];
 
   if (search) {
-    sql += ` AND (FIRST_NAME ILIKE $1 OR LAST_NAME ILIKE $1 OR PHONE ILIKE $1 OR E_MAIL ILIKE $1)`;
+    sql += ` AND (first_name ILIKE $1 OR last_name ILIKE $1 OR phone ILIKE $1 OR e_mail ILIKE $1)`;
     params.push(`%${search}%`);
   }
 
@@ -281,7 +254,7 @@ app.get("/api/customers", async (req, res) => {
 app.get("/api/customers/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const result = await db.query(`SELECT * FROM TBL_CUSTOMERS WHERE CUS_ID = $1`, [id]);
+    const result = await db.query(`SELECT * FROM tbl_customers WHERE cus_id = $1`, [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Customer not found" });
     }
@@ -300,21 +273,21 @@ app.post("/api/customers", async (req, res) => {
   }
 
   try {
-    const maxIdResult = await db.query("SELECT MAX(CUS_ID) as maxId FROM TBL_CUSTOMERS");
+    const maxIdResult = await db.query("SELECT MAX(cus_id) as maxId FROM tbl_customers");
     let nextNumber = 1;
-    if (maxIdResult.rows[0]?.maxId) {
-      const numPart = parseInt(maxIdResult.rows[0].maxId.replace(/[^0-9]/g, ""));
+    if (maxIdResult.rows[0]?.maxid) {
+      const numPart = parseInt(maxIdResult.rows[0].maxid.replace(/[^0-9]/g, ""));
       if (!isNaN(numPart)) nextNumber = numPart + 1;
     }
     const newCusId = `CUS${String(nextNumber).padStart(3, "0")}`;
 
     const result = await db.query(
-      `INSERT INTO TBL_CUSTOMERS (CUS_ID, FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE, STATUS) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active') RETURNING CUS_ID`,
+      `INSERT INTO tbl_customers (cus_id, first_name, last_name, phone, e_mail, address, balance, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active') RETURNING cus_id`,
       [newCusId, FIRST_NAME, LAST_NAME, PHONE || null, E_MAIL || null, ADDRESS || null, BALANCE || 0]
     );
 
-    logActivity(req.body.user_id || 1, "Created customer", "TBL_CUSTOMERS", newCusId);
+    logActivity(req.body.user_id || 1, "Created customer", "tbl_customers", newCusId);
     res.json({
       cus_id: newCusId,
       message: "Customer created successfully",
@@ -331,10 +304,10 @@ app.put("/api/customers/:id", async (req, res) => {
 
   try {
     const result = await db.query(
-      `UPDATE TBL_CUSTOMERS 
-       SET FIRST_NAME = $1, LAST_NAME = $2, PHONE = $3, E_MAIL = $4, 
-           ADDRESS = $5, BALANCE = $6, STATUS = $7 
-       WHERE CUS_ID = $8`,
+      `UPDATE tbl_customers 
+       SET first_name = $1, last_name = $2, phone = $3, e_mail = $4, 
+           address = $5, balance = $6, status = $7 
+       WHERE cus_id = $8`,
       [FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE || 0, STATUS || 'Active', id]
     );
 
@@ -342,7 +315,7 @@ app.put("/api/customers/:id", async (req, res) => {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    logActivity(req.body.user_id || 1, "Updated customer", "TBL_CUSTOMERS", id);
+    logActivity(req.body.user_id || 1, "Updated customer", "tbl_customers", id);
     res.json({ message: "Customer updated successfully" });
   } catch (err) {
     console.error("❌ Update customer error:", err.message);
@@ -354,7 +327,7 @@ app.delete("/api/customers/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(
-      `UPDATE TBL_CUSTOMERS SET STATUS = 'Inactive' WHERE CUS_ID = $1`,
+      `UPDATE tbl_customers SET status = 'Inactive' WHERE cus_id = $1`,
       [id]
     );
 
@@ -362,7 +335,7 @@ app.delete("/api/customers/:id", async (req, res) => {
       return res.status(404).json({ error: "Customer not found" });
     }
 
-    logActivity(req.body.user_id || 1, "Deleted customer", "TBL_CUSTOMERS", id);
+    logActivity(req.body.user_id || 1, "Deleted customer", "tbl_customers", id);
     res.json({ message: "Customer deleted successfully" });
   } catch (err) {
     console.error("❌ Delete customer error:", err.message);
@@ -371,17 +344,17 @@ app.delete("/api/customers/:id", async (req, res) => {
 });
 
 // ============================================
-// PRODUCTS - FULLY FIXED ✅
+// PRODUCTS - FULLY FIXED ✅ (Uppercase to Lowercase)
 // ============================================
 app.get("/api/products", async (req, res) => {
   const { search } = req.query;
   console.log("📦 Fetching products - search:", search || "all");
 
-  let sql = "SELECT * FROM TBL_PRODUCTS WHERE STATUS = 'Active'";
+  let sql = "SELECT * FROM tbl_products WHERE status = 'Active'";
   const params = [];
 
   if (search) {
-    sql += ` AND (NAME_EN ILIKE $1 OR NAME_KH ILIKE $1 OR BARCODE ILIKE $1)`;
+    sql += ` AND (name_en ILIKE $1 OR name_kh ILIKE $1 OR barcode ILIKE $1)`;
     params.push(`%${search}%`);
   }
 
@@ -400,7 +373,7 @@ app.get("/api/products/:id", async (req, res) => {
   console.log(`🔍 Fetching product: ${id}`);
 
   try {
-    const result = await db.query(`SELECT * FROM TBL_PRODUCTS WHERE PRODUCT_ID = $1`, [id]);
+    const result = await db.query(`SELECT * FROM tbl_products WHERE product_id = $1`, [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
@@ -410,6 +383,7 @@ app.get("/api/products/:id", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ============================================
 // CREATE PRODUCT - FULLY FIXED ✅
 // ============================================
@@ -428,7 +402,6 @@ app.post("/api/products", async (req, res) => {
     QTY_INSTOCK 
   } = req.body;
 
-  // Validate required fields
   if (!NAME_EN || NAME_EN.trim() === '') {
     return res.status(400).json({ error: "Product English name is required" });
   }
@@ -438,14 +411,10 @@ app.post("/api/products", async (req, res) => {
   }
 
   try {
-    // ✅ FIXED: Get the max PRODUCT_ID correctly
-    const maxIdResult = await db.query(
-      "SELECT MAX(PRODUCT_ID) as maxId FROM TBL_PRODUCTS"
-    );
+    const maxIdResult = await db.query("SELECT MAX(product_id) as maxId FROM tbl_products");
     console.log("📊 Max ID result:", maxIdResult.rows[0]);
     
     let nextNumber = 1;
-    // ✅ Check if maxId exists and is not null
     if (maxIdResult.rows && maxIdResult.rows.length > 0 && maxIdResult.rows[0]?.maxid) {
       const currentId = maxIdResult.rows[0].maxid;
       const numPart = parseInt(String(currentId).replace(/[^0-9]/g, ""));
@@ -454,12 +423,11 @@ app.post("/api/products", async (req, res) => {
     const newProductId = `PROD${String(nextNumber).padStart(3, "0")}`;
     console.log(`📦 Generated PRODUCT_ID: ${newProductId}`);
 
-    // Insert product
     const result = await db.query(
-      `INSERT INTO TBL_PRODUCTS 
-       (PRODUCT_ID, NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID, BUYIN_PRICE, SALEOUT_PRICE, QTY_ALERT, STATUS) 
+      `INSERT INTO tbl_products 
+       (product_id, name_en, name_kh, barcode, brand, category_id, buyin_price, saleout_price, qty_alert, status) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Active') 
-       RETURNING ID`,
+       RETURNING id`,
       [
         newProductId, 
         NAME_EN.trim(), 
@@ -480,12 +448,11 @@ app.post("/api/products", async (req, res) => {
     const productId = result.rows[0].id;
     console.log(`✅ Product created with ID: ${productId}`);
 
-    // Insert stock if QTY_INSTOCK is provided
     const qtyInStock = parseInt(QTY_INSTOCK) || 0;
     if (qtyInStock > 0) {
       try {
         await db.query(
-          `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) 
+          `INSERT INTO tbl_stock (productid, qtyinstock, qtyavailable, qtyreserved) 
            VALUES ($1, $2, $3, $4)`,
           [productId, qtyInStock, qtyInStock, 0]
         );
@@ -535,17 +502,11 @@ app.put("/api/products/:id", async (req, res) => {
 
   try {
     const result = await db.query(
-      `UPDATE TBL_PRODUCTS 
-       SET NAME_EN = $1, 
-           NAME_KH = $2, 
-           BARCODE = $3, 
-           BRAND = $4, 
-           CATEGORY_ID = $5, 
-           BUYIN_PRICE = $6, 
-           SALEOUT_PRICE = $7, 
-           QTY_ALERT = $8, 
-           STATUS = $9 
-       WHERE PRODUCT_ID = $10`,
+      `UPDATE tbl_products 
+       SET name_en = $1, name_kh = $2, barcode = $3, brand = $4, 
+           category_id = $5, buyin_price = $6, saleout_price = $7, 
+           qty_alert = $8, status = $9 
+       WHERE product_id = $10`,
       [
         NAME_EN.trim(), 
         NAME_KH.trim(), 
@@ -564,7 +525,7 @@ app.put("/api/products/:id", async (req, res) => {
       return res.status(404).json({ error: "Product not found" });
     }
 
-    logActivity(req.body.user_id || 1, "Updated product", "TBL_PRODUCTS", id);
+    logActivity(req.body.user_id || 1, "Updated product", "tbl_products", id);
     res.json({ 
       message: "Product updated successfully",
       product_id: id
@@ -583,7 +544,7 @@ app.delete("/api/products/:id", async (req, res) => {
 
   try {
     const result = await db.query(
-      `UPDATE TBL_PRODUCTS SET STATUS = 'Inactive' WHERE PRODUCT_ID = $1`,
+      `UPDATE tbl_products SET status = 'Inactive' WHERE product_id = $1`,
       [id]
     );
 
@@ -591,7 +552,7 @@ app.delete("/api/products/:id", async (req, res) => {
       return res.status(404).json({ error: "Product not found" });
     }
 
-    logActivity(req.body.user_id || 1, "Deleted product", "TBL_PRODUCTS", id);
+    logActivity(req.body.user_id || 1, "Deleted product", "tbl_products", id);
     res.json({ 
       message: "Product deleted successfully",
       product_id: id
@@ -605,19 +566,19 @@ app.delete("/api/products/:id", async (req, res) => {
 });
 
 // ============================================
-// ORDERS
+// ORDERS - FIXED ✅
 // ============================================
 app.get("/api/orders", async (req, res) => {
   const { limit = 50, status } = req.query;
-  let sql = "SELECT * FROM TBL_ORDERS";
+  let sql = "SELECT * FROM tbl_orders";
   const params = [];
 
   if (status) {
-    sql += ` WHERE STATUS = $1`;
+    sql += ` WHERE status = $1`;
     params.push(status);
   }
 
-  sql += " ORDER BY ORDER_DATE DESC";
+  sql += " ORDER BY order_date DESC";
 
   try {
     const result = await db.query(sql, params);
@@ -635,10 +596,10 @@ app.get("/api/orders/pending", async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT OR_ID, ORDER_NO, ORDER_DATE, AMOUNT_US, STATUS, PaymentMethod, NOTES, EMP_PREPARE, CUSTOMER_ID
-       FROM TBL_ORDERS
-       WHERE STATUS IN ('Pending', 'Processing')
-       ORDER BY ORDER_DATE DESC`
+      `SELECT or_id, order_no, order_date, amount_us, status, paymentmethod, notes, emp_prepare, customer_id
+       FROM tbl_orders
+       WHERE status IN ('Pending', 'Processing')
+       ORDER BY order_date DESC`
     );
 
     console.log(`📋 Pending orders found: ${result.rows.length}`);
@@ -652,7 +613,7 @@ app.get("/api/orders/pending", async (req, res) => {
 app.get("/api/orders/recent", async (req, res) => {
   try {
     const result = await db.query(
-      "SELECT * FROM TBL_ORDERS ORDER BY ORDER_DATE DESC LIMIT 10"
+      "SELECT * FROM tbl_orders ORDER BY order_date DESC LIMIT 10"
     );
     res.json(result.rows);
   } catch (err) {
@@ -666,11 +627,11 @@ app.get("/api/stock/low-stock", async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT p.PRODUCT_ID, p.NAME_EN, p.NAME_KH, s.QtyAvailable, p.QTY_ALERT, p.SALEOUT_PRICE
-       FROM Tbl_Stock s
-       LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID
-       WHERE s.QtyAvailable <= p.QTY_ALERT AND p.STATUS = 'Active'
-       ORDER BY s.QtyAvailable ASC`
+      `SELECT p.product_id, p.name_en, p.name_kh, s.qtyavailable, p.qty_alert, p.saleout_price
+       FROM tbl_stock s
+       LEFT JOIN tbl_products p ON s.productid = p.id
+       WHERE s.qtyavailable <= p.qty_alert AND p.status = 'Active'
+       ORDER BY s.qtyavailable ASC`
     );
 
     console.log(`📊 Low stock products found: ${result.rows.length}`);
@@ -682,7 +643,7 @@ app.get("/api/stock/low-stock", async (req, res) => {
 });
 
 // ============================================
-// ORDER DETAILS
+// ORDER DETAILS - FIXED ✅
 // ============================================
 app.get("/api/orders/:id", async (req, res) => {
   const { id } = req.params;
@@ -696,8 +657,8 @@ app.get("/api/orders/:id", async (req, res) => {
 
   try {
     const orderResult = await db.query(
-      `SELECT OR_ID, ORDER_NO, ORDER_DATE, AMOUNT_US, STATUS, PaymentMethod, NOTES, EMP_PREPARE, CUSTOMER_ID
-       FROM TBL_ORDERS WHERE OR_ID = $1`,
+      `SELECT or_id, order_no, order_date, amount_us, status, paymentmethod, notes, emp_prepare, customer_id
+       FROM tbl_orders WHERE or_id = $1`,
       [numericId]
     );
 
@@ -706,14 +667,14 @@ app.get("/api/orders/:id", async (req, res) => {
     }
 
     const order = orderResult.rows[0];
-    const customerId = order.CUSTOMER_ID;
+    const customerId = order.customer_id;
 
     let customer = null;
     try {
       const customerResult = await db.query(
-        `SELECT CUS_ID, FIRST_NAME, LAST_NAME, PHONE, E_MAIL
-         FROM TBL_CUSTOMERS
-         WHERE CUS_ID = $1 OR CUS_ID = $2`,
+        `SELECT cus_id, first_name, last_name, phone, e_mail
+         FROM tbl_customers
+         WHERE cus_id = $1 OR cus_id = $2`,
         [`CUS${String(customerId).padStart(3, "0")}`, customerId]
       );
       if (customerResult.rows.length > 0) {
@@ -726,7 +687,7 @@ app.get("/api/orders/:id", async (req, res) => {
     let payments = [];
     try {
       const paymentResult = await db.query(
-        `SELECT * FROM TBL_PAYMENT WHERE OR_ID = $1`,
+        `SELECT * FROM tbl_payment WHERE or_id = $1`,
         [numericId]
       );
       payments = paymentResult.rows;
@@ -737,8 +698,8 @@ app.get("/api/orders/:id", async (req, res) => {
     let items = [];
     try {
       const itemsResult = await db.query(
-        `SELECT ID, OR_ID, PRODUCT_ID, QTY_ORDER as qty, QTY_BONUS, PRICE as unit_price, DISCOUNT, SUBTOTAL as subtotal
-         FROM TBL_ORDERS_DETAILS WHERE OR_ID = $1`,
+        `SELECT id, or_id, product_id, qty_order as qty, qty_bonus, price as unit_price, discount, subtotal
+         FROM tbl_orders_details WHERE or_id = $1`,
         [numericId]
       );
       items = itemsResult.rows;
@@ -747,17 +708,17 @@ app.get("/api/orders/:id", async (req, res) => {
     }
 
     res.json({
-      OR_ID: order.OR_ID,
-      ORDER_NO: order.ORDER_NO,
-      ORDER_DATE: order.ORDER_DATE,
-      AMOUNT_US: order.AMOUNT_US,
-      STATUS: order.STATUS,
-      PaymentMethod: order.PaymentMethod,
-      NOTES: order.NOTES,
-      EMP_PREPARE: order.EMP_PREPARE,
-      CUSTOMER_ID: order.CUSTOMER_ID,
+      OR_ID: order.or_id,
+      ORDER_NO: order.order_no,
+      ORDER_DATE: order.order_date,
+      AMOUNT_US: order.amount_us,
+      STATUS: order.status,
+      PaymentMethod: order.paymentmethod,
+      NOTES: order.notes,
+      EMP_PREPARE: order.emp_prepare,
+      CUSTOMER_ID: order.customer_id,
       customer: customer || {
-        CUS_ID: order.CUSTOMER_ID,
+        CUS_ID: order.customer_id,
         FIRST_NAME: "Unknown",
         LAST_NAME: "Customer",
         PHONE: null,
@@ -773,13 +734,13 @@ app.get("/api/orders/:id", async (req, res) => {
 });
 
 // ============================================
-// PAYMENT METHODS
+// PAYMENT METHODS - FIXED ✅
 // ============================================
 app.get("/api/payment-methods", async (req, res) => {
   console.log("💳 Fetching payment methods...");
 
   try {
-    const result = await db.query(`SELECT * FROM TBL_PAYMENT_METHOD WHERE STATUS = 'ACTIVE'`);
+    const result = await db.query(`SELECT * FROM tbl_payment_method WHERE status = 'ACTIVE'`);
     console.log(`💳 Payment methods found: ${result.rows.length}`);
     res.json(result.rows);
   } catch (err) {
@@ -789,14 +750,14 @@ app.get("/api/payment-methods", async (req, res) => {
 });
 
 // ============================================
-// STOCK MANAGEMENT
+// STOCK MANAGEMENT - FIXED ✅
 // ============================================
 app.get("/api/stock", async (req, res) => {
   try {
     const result = await db.query(`
-      SELECT s.*, p.PRODUCT_ID as PRODUCT_CODE, p.NAME_EN, p.NAME_KH, p.QTY_ALERT, p.SALEOUT_PRICE
-      FROM Tbl_Stock s
-      LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID
+      SELECT s.*, p.product_id as product_code, p.name_en, p.name_kh, p.qty_alert, p.saleout_price
+      FROM tbl_stock s
+      LEFT JOIN tbl_products p ON s.productid = p.id
     `);
     console.log(`📊 Stock records found: ${result.rows.length}`);
     res.json(result.rows);
@@ -816,7 +777,7 @@ app.get("/api/stock/product/:id", async (req, res) => {
 
   try {
     const productResult = await db.query(
-      `SELECT ID, PRODUCT_ID, NAME_EN FROM TBL_PRODUCTS WHERE PRODUCT_ID = $1`,
+      `SELECT id, product_id, name_en FROM tbl_products WHERE product_id = $1`,
       [id]
     );
 
@@ -825,30 +786,30 @@ app.get("/api/stock/product/:id", async (req, res) => {
     }
 
     const product = productResult.rows[0];
-    const numericProductId = product.ID;
+    const numericProductId = product.id;
 
     const stockResult = await db.query(
-      `SELECT * FROM Tbl_Stock WHERE ProductID = $1`,
+      `SELECT * FROM tbl_stock WHERE productid = $1`,
       [numericProductId]
     );
 
     if (stockResult.rows.length === 0) {
       await db.query(
-        `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) VALUES ($1, 0, 0, 0)`,
+        `INSERT INTO tbl_stock (productid, qtyinstock, qtyavailable, qtyreserved) VALUES ($1, 0, 0, 0)`,
         [numericProductId]
       );
-      return res.json({ ProductID: id, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: product.NAME_EN || "Unknown" });
+      return res.json({ ProductID: id, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: product.name_en || "Unknown" });
     }
 
     const stock = stockResult.rows[0];
     res.json({
       ProductID: id,
-      StockID: stock.StockID,
-      QtyInStock: stock.QtyInStock || 0,
-      QtyReserved: stock.QtyReserved || 0,
-      QtyAvailable: stock.QtyAvailable || 0,
-      LastUpdated: stock.LastUpdated || null,
-      PRODUCT_NAME: product.NAME_EN || "Unknown",
+      StockID: stock.stockid,
+      QtyInStock: stock.qtyinstock || 0,
+      QtyReserved: stock.qtyreserved || 0,
+      QtyAvailable: stock.qtyavailable || 0,
+      LastUpdated: stock.lastupdated || null,
+      PRODUCT_NAME: product.name_en || "Unknown",
     });
   } catch (err) {
     console.error("❌ Stock check error:", err.message);
@@ -857,39 +818,39 @@ app.get("/api/stock/product/:id", async (req, res) => {
 });
 
 // ============================================
-// SUPPLIERS - FIXED
+// SUPPLIERS - FIXED ✅ (Uppercase to Lowercase)
 // ============================================
 app.get("/api/suppliers", async (req, res) => {
   const { search } = req.query;
   console.log("🔍 GET /api/suppliers - search:", search);
 
-  let sql = "SELECT * FROM TBL_SUPPLIERS WHERE STATUS = 'Active'";
+  let sql = "SELECT * FROM tbl_suppliers WHERE status = 'Active'";
   const params = [];
 
   if (search) {
-    sql += ` AND (COMPANY ILIKE $1 OR FIRST_NAME ILIKE $1 OR LAST_NAME ILIKE $1 OR PHONE ILIKE $1 OR E_MAIL ILIKE $1)`;
+    sql += ` AND (company ILIKE $1 OR first_name ILIKE $1 OR last_name ILIKE $1 OR phone ILIKE $1 OR e_mail ILIKE $1)`;
     params.push(`%${search}%`);
   }
 
-  sql += " ORDER BY COMPANY";
+  sql += " ORDER BY company";
 
   try {
     const result = await db.query(sql, params);
     
     const mappedRows = result.rows.map(row => ({
-      SUP_ID: row.SUP_ID || `SUP${String(Math.random()).slice(2, 6)}`,
-      SUP_NAME: row.COMPANY || 
-                (row.FIRST_NAME && row.LAST_NAME ? `${row.FIRST_NAME} ${row.LAST_NAME}`.trim() : '') ||
-                row.FIRST_NAME || 
-                row.LAST_NAME || 
+      SUP_ID: row.sup_id || `SUP${String(Math.random()).slice(2, 6)}`,
+      SUP_NAME: row.company || 
+                (row.first_name && row.last_name ? `${row.first_name} ${row.last_name}`.trim() : '') ||
+                row.first_name || 
+                row.last_name || 
                 'Unknown Supplier',
-      CONTACT_PERSON: `${row.FIRST_NAME || ''} ${row.LAST_NAME || ''}`.trim() || row.FIRST_NAME || row.LAST_NAME || 'No contact',
-      PHONE: row.PHONE || '',
-      EMAIL: row.E_MAIL || '',
-      ADDRESS: row.ADDRESS || '',
-      STATUS: row.STATUS || 'Active',
-      WEBSITE: row.WEBSITE || '',
-      PAYMENT_TI: row.PAYMENT_TI || ''
+      CONTACT_PERSON: `${row.first_name || ''} ${row.last_name || ''}`.trim() || row.first_name || row.last_name || 'No contact',
+      PHONE: row.phone || '',
+      EMAIL: row.e_mail || '',
+      ADDRESS: row.address || '',
+      STATUS: row.status || 'Active',
+      WEBSITE: row.website || '',
+      PAYMENT_TI: row.payment_ti || ''
     }));
 
     console.log(`🚚 Suppliers found: ${mappedRows.length}`);
@@ -905,26 +866,26 @@ app.get("/api/suppliers/:id", async (req, res) => {
   console.log(`🔍 GET /api/suppliers/${id}`);
 
   try {
-    const result = await db.query(`SELECT * FROM TBL_SUPPLIERS WHERE SUP_ID = $1`, [id]);
+    const result = await db.query(`SELECT * FROM tbl_suppliers WHERE sup_id = $1`, [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Supplier not found" });
     }
 
     const row = result.rows[0];
     const mappedRow = {
-      SUP_ID: row.SUP_ID,
-      SUP_NAME: row.COMPANY || 
-                (row.FIRST_NAME && row.LAST_NAME ? `${row.FIRST_NAME} ${row.LAST_NAME}`.trim() : '') ||
-                row.FIRST_NAME || 
-                row.LAST_NAME || 
+      SUP_ID: row.sup_id,
+      SUP_NAME: row.company || 
+                (row.first_name && row.last_name ? `${row.first_name} ${row.last_name}`.trim() : '') ||
+                row.first_name || 
+                row.last_name || 
                 'Unknown Supplier',
-      CONTACT_PERSON: `${row.FIRST_NAME || ''} ${row.LAST_NAME || ''}`.trim() || row.FIRST_NAME || row.LAST_NAME || 'No contact',
-      PHONE: row.PHONE || '',
-      EMAIL: row.E_MAIL || '',
-      ADDRESS: row.ADDRESS || '',
-      STATUS: row.STATUS || 'Active',
-      WEBSITE: row.WEBSITE || '',
-      PAYMENT_TI: row.PAYMENT_TI || ''
+      CONTACT_PERSON: `${row.first_name || ''} ${row.last_name || ''}`.trim() || row.first_name || row.last_name || 'No contact',
+      PHONE: row.phone || '',
+      EMAIL: row.e_mail || '',
+      ADDRESS: row.address || '',
+      STATUS: row.status || 'Active',
+      WEBSITE: row.website || '',
+      PAYMENT_TI: row.payment_ti || ''
     };
 
     res.json(mappedRow);
@@ -972,21 +933,21 @@ app.post("/api/suppliers", async (req, res) => {
   }
 
   try {
-    const maxIdResult = await db.query("SELECT MAX(SUP_ID) as maxId FROM TBL_SUPPLIERS");
+    const maxIdResult = await db.query("SELECT MAX(sup_id) as maxId FROM tbl_suppliers");
     let nextNumber = 1;
-    if (maxIdResult.rows[0]?.maxId) {
-      const numPart = parseInt(maxIdResult.rows[0].maxId.replace(/[^0-9]/g, ""));
+    if (maxIdResult.rows[0]?.maxid) {
+      const numPart = parseInt(maxIdResult.rows[0].maxid.replace(/[^0-9]/g, ""));
       if (!isNaN(numPart)) nextNumber = numPart + 1;
     }
     const newSupId = `SUP${String(nextNumber).padStart(3, "0")}`;
 
     const result = await db.query(
-      `INSERT INTO TBL_SUPPLIERS (SUP_ID, COMPANY, FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, STATUS, WEBSITE) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active', $8) RETURNING SUP_ID`,
+      `INSERT INTO tbl_suppliers (sup_id, company, first_name, last_name, phone, e_mail, address, status, website) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active', $8) RETURNING sup_id`,
       [newSupId, supName, firstName || null, lastName || null, phone || null, email || null, address || null, website || null]
     );
 
-    logActivity(req.body.user_id || 1, "Created supplier", "TBL_SUPPLIERS", newSupId);
+    logActivity(req.body.user_id || 1, "Created supplier", "tbl_suppliers", newSupId);
 
     res.json({
       SUP_ID: newSupId,
@@ -1037,9 +998,9 @@ app.put("/api/suppliers/:id", async (req, res) => {
 
   try {
     const result = await db.query(
-      `UPDATE TBL_SUPPLIERS 
-       SET COMPANY = $1, FIRST_NAME = $2, LAST_NAME = $3, PHONE = $4, E_MAIL = $5, ADDRESS = $6, STATUS = $7, WEBSITE = $8
-       WHERE SUP_ID = $9`,
+      `UPDATE tbl_suppliers 
+       SET company = $1, first_name = $2, last_name = $3, phone = $4, e_mail = $5, address = $6, status = $7, website = $8
+       WHERE sup_id = $9`,
       [supName, firstName || null, lastName || null, phone || null, email || null, address || null, status || 'Active', website || null, id]
     );
 
@@ -1047,7 +1008,7 @@ app.put("/api/suppliers/:id", async (req, res) => {
       return res.status(404).json({ error: "Supplier not found" });
     }
 
-    logActivity(req.body.user_id || 1, "Updated supplier", "TBL_SUPPLIERS", id);
+    logActivity(req.body.user_id || 1, "Updated supplier", "tbl_suppliers", id);
     res.json({ 
       message: "Supplier updated successfully",
       SUP_ID: id,
@@ -1071,7 +1032,7 @@ app.delete("/api/suppliers/:id", async (req, res) => {
 
   try {
     const result = await db.query(
-      `UPDATE TBL_SUPPLIERS SET STATUS = 'Inactive' WHERE SUP_ID = $1`,
+      `UPDATE tbl_suppliers SET status = 'Inactive' WHERE sup_id = $1`,
       [id]
     );
 
@@ -1079,7 +1040,7 @@ app.delete("/api/suppliers/:id", async (req, res) => {
       return res.status(404).json({ error: "Supplier not found" });
     }
 
-    logActivity(req.body.user_id || 1, "Deleted supplier", "TBL_SUPPLIERS", id);
+    logActivity(req.body.user_id || 1, "Deleted supplier", "tbl_suppliers", id);
     res.json({ message: "Supplier deleted successfully" });
   } catch (err) {
     console.error("❌ Delete supplier error:", err.message);
@@ -1088,13 +1049,13 @@ app.delete("/api/suppliers/:id", async (req, res) => {
 });
 
 // ============================================
-// REPORTS API
+// REPORTS API - FIXED ✅ (Lowercase)
 // ============================================
 app.get("/api/reports/customers", async (req, res) => {
   console.log("📊 Generating Customer Report...");
   try {
     const result = await db.query(
-      "SELECT * FROM TBL_CUSTOMERS WHERE STATUS = 'Active' ORDER BY FIRST_NAME, LAST_NAME"
+      "SELECT * FROM tbl_customers WHERE status = 'Active' ORDER BY first_name, last_name"
     );
     console.log(`📊 Customer report: ${result.rows.length} records`);
     res.json(result.rows || []);
@@ -1108,8 +1069,8 @@ app.get("/api/reports/products", async (req, res) => {
   console.log("📊 Generating Product Report...");
   try {
     const result = await db.query(
-      `SELECT ID, PRODUCT_ID, NAME_EN, NAME_KH, SALEOUT_PRICE as PRICE, STATUS
-       FROM TBL_PRODUCTS WHERE STATUS = 'Active' ORDER BY NAME_EN`
+      `SELECT id, product_id, name_en, name_kh, saleout_price as price, status
+       FROM tbl_products WHERE status = 'Active' ORDER BY name_en`
     );
     console.log(`📊 Product report: ${result.rows.length} records`);
     res.json(result.rows || []);
@@ -1123,7 +1084,7 @@ app.get("/api/reports/orders", async (req, res) => {
   console.log("📊 Generating Order Report...");
   try {
     const result = await db.query(
-      `SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as TOTAL_AMOUNT, STATUS FROM TBL_ORDERS ORDER BY ORDER_DATE DESC`
+      `SELECT order_no, order_date, amount_us as total_amount, status FROM tbl_orders ORDER BY order_date DESC`
     );
     console.log(`📊 Order report: ${result.rows.length} records`);
     res.json(result.rows || []);
@@ -1137,9 +1098,9 @@ app.get("/api/reports/stock", async (req, res) => {
   console.log("📊 Generating Stock Report...");
   try {
     const result = await db.query(`
-      SELECT s.StockID, s.ProductID, p.PRODUCT_ID as PRODUCT_CODE, p.NAME_EN as PRODUCT_NAME,
-             s.QtyInStock as IN_STOCK, s.QtyAvailable as AVAILABLE, s.QtyReserved as RESERVED, s.LastUpdated
-      FROM Tbl_Stock s LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID ORDER BY p.NAME_EN
+      SELECT s.stockid, s.productid, p.product_id as product_code, p.name_en as product_name,
+             s.qtyinstock as in_stock, s.qtyavailable as available, s.qtyreserved as reserved, s.lastupdated
+      FROM tbl_stock s LEFT JOIN tbl_products p ON s.productid = p.id ORDER BY p.name_en
     `);
     console.log(`📊 Stock report: ${result.rows.length} records`);
     res.json(result.rows || []);
@@ -1153,8 +1114,8 @@ app.get("/api/reports/sales", async (req, res) => {
   console.log("📊 Generating Sales Report...");
   try {
     const result = await db.query(
-      `SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as amount, STATUS
-       FROM TBL_ORDERS ORDER BY ORDER_DATE DESC`
+      `SELECT order_no, order_date, amount_us as amount, status
+       FROM tbl_orders ORDER BY order_date DESC`
     );
     console.log(`📊 Sales report: ${result.rows.length} records`);
     res.json(result.rows || []);
@@ -1168,8 +1129,8 @@ app.get("/api/reports/inventory", async (req, res) => {
   console.log("📊 Generating Inventory Report...");
   try {
     const result = await db.query(`
-      SELECT p.PRODUCT_ID, p.NAME_EN as product_name, s.QtyInStock, s.QtyAvailable, s.QtyReserved, p.SALEOUT_PRICE as price
-      FROM Tbl_Stock s LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID ORDER BY p.NAME_EN
+      SELECT p.product_id, p.name_en as product_name, s.qtyinstock, s.qtyavailable, s.qtyreserved, p.saleout_price as price
+      FROM tbl_stock s LEFT JOIN tbl_products p ON s.productid = p.id ORDER BY p.name_en
     `);
     console.log(`📊 Inventory report: ${result.rows.length} records`);
     res.json(result.rows || []);
@@ -1179,15 +1140,18 @@ app.get("/api/reports/inventory", async (req, res) => {
   }
 });
 
+// ============================================
+// MONTHLY SALES - FIXED ✅
+// ============================================
 app.get("/api/reports/monthlySales", async (req, res) => {
   console.log("📈 Building monthly sales report...");
   try {
     const result = await db.query(`
-      SELECT EXTRACT(YEAR FROM ORDER_DATE) as year, EXTRACT(MONTH FROM ORDER_DATE) as month,
-             SUM(AMOUNT_US) as total, COUNT(*) as orders
-      FROM TBL_ORDERS
-      GROUP BY EXTRACT(YEAR FROM ORDER_DATE), EXTRACT(MONTH FROM ORDER_DATE)
-      ORDER BY EXTRACT(YEAR FROM ORDER_DATE) ASC, EXTRACT(MONTH FROM ORDER_DATE) ASC
+      SELECT EXTRACT(YEAR FROM order_date) as year, EXTRACT(MONTH FROM order_date) as month,
+             SUM(amount_us) as total, COUNT(*) as orders
+      FROM tbl_orders
+      GROUP BY EXTRACT(YEAR FROM order_date), EXTRACT(MONTH FROM order_date)
+      ORDER BY EXTRACT(YEAR FROM order_date) ASC, EXTRACT(MONTH FROM order_date) ASC
     `);
     
     const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -1203,19 +1167,22 @@ app.get("/api/reports/monthlySales", async (req, res) => {
   }
 });
 
+// ============================================
+// PRODUCT PERFORMANCE - FIXED ✅
+// ============================================
 app.get("/api/reports/productPerformance", async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   console.log(`📈 Building product performance report (top ${limit})...`);
   
   try {
     const result = await db.query(`
-      SELECT p.NAME_EN as name,
-             SUM(od.QTY_ORDER) as sales,
-             SUM(od.QTY_ORDER * od.PRICE) as revenue
-      FROM TBL_ORDERS_DETAILS od
-      INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
-      GROUP BY p.NAME_EN
-      ORDER BY SUM(od.QTY_ORDER) DESC
+      SELECT p.name_en as name,
+             SUM(od.qty_order) as sales,
+             SUM(od.qty_order * od.price) as revenue
+      FROM tbl_orders_details od
+      INNER JOIN tbl_products p ON od.product_id = p.id
+      GROUP BY p.name_en
+      ORDER BY SUM(od.qty_order) DESC
       LIMIT $1
     `, [limit]);
     
@@ -1231,20 +1198,23 @@ app.get("/api/reports/productPerformance", async (req, res) => {
   }
 });
 
+// ============================================
+// CUSTOMER ANALYTICS - FIXED ✅
+// ============================================
 app.get("/api/reports/customerAnalytics", async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   console.log(`📈 Building customer analytics report (top ${limit})...`);
   
   try {
     const result = await db.query(`
-      SELECT c.CUS_ID as id,
-             CONCAT(c.FIRST_NAME, ' ', c.LAST_NAME) as name,
-             COUNT(o.OR_ID) as orders,
-             COALESCE(SUM(o.AMOUNT_US), 0) as totalSpent
-      FROM TBL_CUSTOMERS c
-      LEFT JOIN TBL_ORDERS o ON c.ID = o.CUSTOMER_ID
-      GROUP BY c.CUS_ID, c.FIRST_NAME, c.LAST_NAME
-      ORDER BY COALESCE(SUM(o.AMOUNT_US), 0) DESC
+      SELECT c.cus_id as id,
+             CONCAT(c.first_name, ' ', c.last_name) as name,
+             COUNT(o.or_id) as orders,
+             COALESCE(SUM(o.amount_us), 0) as totalSpent
+      FROM tbl_customers c
+      LEFT JOIN tbl_orders o ON c.id = o.customer_id
+      GROUP BY c.cus_id, c.first_name, c.last_name
+      ORDER BY COALESCE(SUM(o.amount_us), 0) DESC
       LIMIT $1
     `, [limit]);
     
@@ -1262,23 +1232,26 @@ app.get("/api/reports/customerAnalytics", async (req, res) => {
   }
 });
 
+// ============================================
+// REVENUE SUMMARY - FIXED ✅
+// ============================================
 app.get("/api/reports/revenueSummary", async (req, res) => {
   console.log("📈 Building revenue summary report...");
   
   try {
     const currentResult = await db.query(
-      `SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue, COUNT(*) as orders 
-       FROM TBL_ORDERS WHERE ORDER_DATE >= CURRENT_DATE - INTERVAL '30 days'`
+      `SELECT COALESCE(SUM(amount_us), 0) as revenue, COUNT(*) as orders 
+       FROM tbl_orders WHERE order_date >= CURRENT_DATE - INTERVAL '30 days'`
     );
     
     const previousResult = await db.query(
-      `SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue, COUNT(*) as orders 
-       FROM TBL_ORDERS WHERE ORDER_DATE >= CURRENT_DATE - INTERVAL '60 days' 
-       AND ORDER_DATE < CURRENT_DATE - INTERVAL '30 days'`
+      `SELECT COALESCE(SUM(amount_us), 0) as revenue, COUNT(*) as orders 
+       FROM tbl_orders WHERE order_date >= CURRENT_DATE - INTERVAL '60 days' 
+       AND order_date < CURRENT_DATE - INTERVAL '30 days'`
     );
     
-    const customersResult = await db.query("SELECT COUNT(*) as count FROM TBL_CUSTOMERS");
-    const productsResult = await db.query("SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'");
+    const customersResult = await db.query("SELECT COUNT(*) as count FROM tbl_customers");
+    const productsResult = await db.query("SELECT COUNT(*) as count FROM tbl_products WHERE status = 'Active'");
 
     const currentRevenue = parseFloat(currentResult.rows[0]?.revenue || 0);
     const currentOrders = parseInt(currentResult.rows[0]?.orders || 0);
@@ -1303,7 +1276,7 @@ app.get("/api/reports/revenueSummary", async (req, res) => {
 });
 
 // ============================================
-// ANALYTICS API
+// ANALYTICS API - FIXED ✅
 // ============================================
 function getStartDateForRange(range) {
   const d = new Date();
@@ -1323,11 +1296,11 @@ app.get("/api/analytics/monthly-revenue", async (req, res) => {
 
   try {
     const result = await db.query(`
-      SELECT EXTRACT(YEAR FROM ORDER_DATE) as year, EXTRACT(MONTH FROM ORDER_DATE) as month,
-             SUM(AMOUNT_US) as revenue, COUNT(*) as orders
-      FROM TBL_ORDERS WHERE ORDER_DATE >= $1
-      GROUP BY EXTRACT(YEAR FROM ORDER_DATE), EXTRACT(MONTH FROM ORDER_DATE)
-      ORDER BY EXTRACT(YEAR FROM ORDER_DATE) ASC, EXTRACT(MONTH FROM ORDER_DATE) ASC
+      SELECT EXTRACT(YEAR FROM order_date) as year, EXTRACT(MONTH FROM order_date) as month,
+             SUM(amount_us) as revenue, COUNT(*) as orders
+      FROM tbl_orders WHERE order_date >= $1
+      GROUP BY EXTRACT(YEAR FROM order_date), EXTRACT(MONTH FROM order_date)
+      ORDER BY EXTRACT(YEAR FROM order_date) ASC, EXTRACT(MONTH FROM order_date) ASC
     `, [startDate]);
 
     const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -1350,13 +1323,13 @@ app.get("/api/analytics/top-products", async (req, res) => {
 
   try {
     const result = await db.query(`
-      SELECT p.NAME_EN as product_name,
-             SUM(od.QTY_ORDER) as total_sold,
-             SUM(od.QTY_ORDER * od.PRICE) as revenue
-      FROM TBL_ORDERS_DETAILS od
-      LEFT JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
-      GROUP BY p.NAME_EN
-      ORDER BY SUM(od.QTY_ORDER) DESC
+      SELECT p.name_en as product_name,
+             SUM(od.qty_order) as total_sold,
+             SUM(od.qty_order * od.price) as revenue
+      FROM tbl_orders_details od
+      LEFT JOIN tbl_products p ON od.product_id = p.id
+      GROUP BY p.name_en
+      ORDER BY SUM(od.qty_order) DESC
       LIMIT $1
     `, [limit]);
 
@@ -1383,16 +1356,16 @@ app.get("/api/analytics/customer-history/:id", async (req, res) => {
 
   try {
     const result = await db.query(`
-      SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as amount, STATUS
-      FROM TBL_ORDERS WHERE CUSTOMER_ID = $1
-      ORDER BY ORDER_DATE DESC
+      SELECT order_no, order_date, amount_us as amount, status
+      FROM tbl_orders WHERE customer_id = $1
+      ORDER BY order_date DESC
     `, [customerId]);
 
     const formatted = result.rows.map((r) => ({
-      ORDER_NO: r.ORDER_NO,
-      ORDER_DATE: r.ORDER_DATE,
+      ORDER_NO: r.order_no,
+      ORDER_DATE: r.order_date,
       amount: parseFloat(r.amount) || 0,
-      STATUS: r.STATUS || "Pending",
+      STATUS: r.status || "Pending",
     }));
     console.log(`📊 Customer history: ${formatted.length} orders`);
     res.json(formatted);
@@ -1406,11 +1379,11 @@ app.get("/api/analytics/yearly-revenue", async (req, res) => {
   console.log("📊 Fetching yearly revenue...");
   try {
     const result = await db.query(`
-      SELECT EXTRACT(YEAR FROM ORDER_DATE) as year,
-             SUM(AMOUNT_US) as revenue, COUNT(*) as orders
-      FROM TBL_ORDERS
-      GROUP BY EXTRACT(YEAR FROM ORDER_DATE)
-      ORDER BY EXTRACT(YEAR FROM ORDER_DATE) ASC
+      SELECT EXTRACT(YEAR FROM order_date) as year,
+             SUM(amount_us) as revenue, COUNT(*) as orders
+      FROM tbl_orders
+      GROUP BY EXTRACT(YEAR FROM order_date)
+      ORDER BY EXTRACT(YEAR FROM order_date) ASC
     `);
 
     const formatted = result.rows.map((r) => ({
@@ -1431,20 +1404,20 @@ app.get("/api/analytics/summary", async (req, res) => {
 
   try {
     const currentResult = await db.query(`
-      SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue, COUNT(*) as orders
-      FROM TBL_ORDERS
-      WHERE EXTRACT(MONTH FROM ORDER_DATE) = EXTRACT(MONTH FROM CURRENT_DATE)
-      AND EXTRACT(YEAR FROM ORDER_DATE) = EXTRACT(YEAR FROM CURRENT_DATE)
+      SELECT COALESCE(SUM(amount_us), 0) as revenue, COUNT(*) as orders
+      FROM tbl_orders
+      WHERE EXTRACT(MONTH FROM order_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+      AND EXTRACT(YEAR FROM order_date) = EXTRACT(YEAR FROM CURRENT_DATE)
     `);
 
     const previousResult = await db.query(`
-      SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue, COUNT(*) as orders
-      FROM TBL_ORDERS
-      WHERE EXTRACT(MONTH FROM ORDER_DATE) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month')
-      AND EXTRACT(YEAR FROM ORDER_DATE) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month')
+      SELECT COALESCE(SUM(amount_us), 0) as revenue, COUNT(*) as orders
+      FROM tbl_orders
+      WHERE EXTRACT(MONTH FROM order_date) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month')
+      AND EXTRACT(YEAR FROM order_date) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month')
     `);
 
-    const productsResult = await db.query("SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'");
+    const productsResult = await db.query("SELECT COUNT(*) as count FROM tbl_products WHERE status = 'Active'");
 
     const currentRevenue = parseFloat(currentResult.rows[0]?.revenue || 0);
     const currentOrders = parseInt(currentResult.rows[0]?.orders || 0);
@@ -1467,13 +1440,13 @@ app.get("/api/analytics/summary", async (req, res) => {
 });
 
 // ============================================
-// USER MANAGEMENT
+// USER MANAGEMENT - FIXED ✅
 // ============================================
 app.get("/api/users", async (req, res) => {
   console.log("👥 Fetching users...");
   try {
     const result = await db.query(
-      "SELECT UserID, Username, FullName, Role, Status, CreatedAt FROM Tbl_Users"
+      "SELECT userid, username, fullname, role, status, createdat FROM tbl_users"
     );
     
     if (result.rows.length === 0) {
@@ -1482,13 +1455,13 @@ app.get("/api/users", async (req, res) => {
     }
     
     const mappedUsers = result.rows.map((user) => ({
-      user_id: user.UserID,
-      username: user.Username || "",
-      fullname: user.FullName || "",
-      role: user.Role || "Cashier",
-      role_id: user.Role === "Admin" ? 1 : user.Role === "Cashier" ? 2 : 3,
-      status: user.Status || "ACTIVE",
-      last_login: user.CreatedAt || null,
+      user_id: user.userid,
+      username: user.username || "",
+      fullname: user.fullname || "",
+      role: user.role || "Cashier",
+      role_id: user.role === "Admin" ? 1 : user.role === "Cashier" ? 2 : 3,
+      status: user.status || "ACTIVE",
+      last_login: user.createdat || null,
     }));
     console.log(`✅ Found ${mappedUsers.length} users`);
     res.json(mappedUsers);
@@ -1512,7 +1485,7 @@ app.post("/api/users", async (req, res) => {
 
   try {
     const existingResult = await db.query(
-      "SELECT UserID FROM Tbl_Users WHERE Username = $1",
+      "SELECT userid FROM tbl_users WHERE username = $1",
       [username]
     );
     
@@ -1521,14 +1494,14 @@ app.post("/api/users", async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO Tbl_Users (Username, Password, FullName, Role, Status) 
-       VALUES ($1, $2, $3, $4, 'ACTIVE') RETURNING UserID`,
+      `INSERT INTO tbl_users (username, password, fullname, role, status) 
+       VALUES ($1, $2, $3, $4, 'ACTIVE') RETURNING userid`,
       [username, password, fullname || username, role]
     );
 
-    const userId = result.rows[0].UserID;
+    const userId = result.rows[0].userid;
     console.log("✅ User created with ID:", userId);
-    logActivity(req.body.user_id || 1, "Created user", "Tbl_Users", userId);
+    logActivity(req.body.user_id || 1, "Created user", "tbl_users", userId);
     res.json({ user_id: userId, message: "User created successfully" });
   } catch (err) {
     console.error("❌ Create user error:", err.message);
@@ -1551,7 +1524,7 @@ app.put("/api/users/:id", async (req, res) => {
 
   try {
     const existingResult = await db.query(
-      "SELECT UserID FROM Tbl_Users WHERE Username = $1 AND UserID != $2",
+      "SELECT userid FROM tbl_users WHERE username = $1 AND userid != $2",
       [username, id]
     );
     
@@ -1559,15 +1532,15 @@ app.put("/api/users/:id", async (req, res) => {
       return res.status(400).json({ error: "Username already exists" });
     }
 
-    let query = `UPDATE Tbl_Users SET Username = $1, FullName = $2, Role = $3`;
+    let query = `UPDATE tbl_users SET username = $1, fullname = $2, role = $3`;
     const params = [username, fullname || username, role];
 
     if (password && password.trim() !== "") {
-      query += `, Password = $4`;
+      query += `, password = $4`;
       params.push(password);
-      query += ` WHERE UserID = $${params.length}`;
+      query += ` WHERE userid = $${params.length}`;
     } else {
-      query += ` WHERE UserID = $${params.length + 1}`;
+      query += ` WHERE userid = $${params.length + 1}`;
     }
     params.push(id);
 
@@ -1578,7 +1551,7 @@ app.put("/api/users/:id", async (req, res) => {
     }
 
     console.log("✅ User updated, ID:", id);
-    logActivity(req.body.user_id || 1, "Updated user", "Tbl_Users", id);
+    logActivity(req.body.user_id || 1, "Updated user", "tbl_users", id);
     res.json({ message: "User updated successfully" });
   } catch (err) {
     console.error("❌ Update user error:", err.message);
@@ -1596,7 +1569,7 @@ app.delete("/api/users/:id", async (req, res) => {
 
   try {
     const result = await db.query(
-      "DELETE FROM Tbl_Users WHERE UserID = $1",
+      "DELETE FROM tbl_users WHERE userid = $1",
       [id]
     );
 
@@ -1605,7 +1578,7 @@ app.delete("/api/users/:id", async (req, res) => {
     }
 
     console.log("✅ User deleted, ID:", id);
-    logActivity(req.body.user_id || 1, "Deleted user", "Tbl_Users", id);
+    logActivity(req.body.user_id || 1, "Deleted user", "tbl_users", id);
     res.json({ message: "User deleted successfully" });
   } catch (err) {
     console.error("❌ Delete user error:", err.message);
@@ -1614,12 +1587,12 @@ app.delete("/api/users/:id", async (req, res) => {
 });
 
 // ============================================
-// WARRANTY API
+// WARRANTY API - FIXED ✅
 // ============================================
 app.get("/api/warranty", async (req, res) => {
   console.log("🛡️ Fetching warranty records...");
   try {
-    const result = await db.query("SELECT * FROM Tbl_Warranty ORDER BY WarrantyID DESC");
+    const result = await db.query("SELECT * FROM tbl_warranty ORDER BY warrantyid DESC");
     console.log(`🛡️ Warranty records found: ${result.rows.length}`);
     res.json(result.rows);
   } catch (err) {
@@ -1637,11 +1610,11 @@ app.post("/api/warranty", async (req, res) => {
 
   try {
     const result = await db.query(
-      `INSERT INTO Tbl_Warranty (CustomerID, ProductID, SerialNumber, WarrantyPeriod, WarrantyStartDate, WarrantyEndDate, Status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'Active') RETURNING WarrantyID`,
+      `INSERT INTO tbl_warranty (customerid, productid, serialnumber, warrantyperiod, warrantystartdate, warrantyenddate, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'Active') RETURNING warrantyid`,
       [CustomerID, ProductID, SerialNumber || null, Number(WarrantyPeriod) || 12, WarrantyStartDate, endDate.toISOString().split("T")[0]]
     );
-    res.json({ warranty_id: result.rows[0].WarrantyID, message: "Warranty created successfully" });
+    res.json({ warranty_id: result.rows[0].warrantyid, message: "Warranty created successfully" });
   } catch (err) {
     console.error("❌ Create warranty error:", err.message);
     res.status(500).json({ error: err.message });
@@ -1649,12 +1622,12 @@ app.post("/api/warranty", async (req, res) => {
 });
 
 // ============================================
-// SERVICE REQUESTS API
+// SERVICE REQUESTS API - FIXED ✅
 // ============================================
 app.get("/api/services", async (req, res) => {
   console.log("🔧 Fetching service requests...");
   try {
-    const result = await db.query("SELECT * FROM Tbl_Service_Requests ORDER BY ServiceID DESC");
+    const result = await db.query("SELECT * FROM tbl_service_requests ORDER BY serviceid DESC");
     console.log(`🔧 Service requests found: ${result.rows.length}`);
     res.json(result.rows);
   } catch (err) {
@@ -1670,12 +1643,12 @@ app.post("/api/services", async (req, res) => {
 
   try {
     const result = await db.query(
-      `INSERT INTO Tbl_Service_Requests (ServiceNo, CustomerID, ProductID, SerialNumber, WarrantyID,
-        IssueDescription, ServiceType, Status, ReceivedDate, EstimatedCost)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, $9) RETURNING ServiceID`,
+      `INSERT INTO tbl_service_requests (serviceno, customerid, productid, serialnumber, warrantyid,
+        issuedescription, servicetype, status, receiveddate, estimatedcost)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, $9) RETURNING serviceid`,
       [serviceNo, CustomerID, ProductID, SerialNumber || null, WarrantyID || null, IssueDescription || null, ServiceType || "Repair", Status || "PENDING", Number(EstimatedCost) || 0]
     );
-    res.json({ service_id: result.rows[0].ServiceID, message: "Service request created successfully" });
+    res.json({ service_id: result.rows[0].serviceid, message: "Service request created successfully" });
   } catch (err) {
     console.error("❌ Create service error:", err.message);
     res.status(500).json({ error: err.message });
@@ -1683,7 +1656,7 @@ app.post("/api/services", async (req, res) => {
 });
 
 // ============================================
-// PAYMENT API
+// PAYMENT API - FIXED ✅
 // ============================================
 app.post("/api/payments/create-payment-intent", async (req, res) => {
   const { amount, orderId } = req.body;
@@ -1695,7 +1668,7 @@ app.post("/api/payments/record", async (req, res) => {
 
   try {
     const result = await db.query(
-      `INSERT INTO TBL_PAYMENT (OR_ID, AMOUNT_US, AMOUNT_KH, PAY_DATE, STATUS)
+      `INSERT INTO tbl_payment (or_id, amount_us, amount_kh, pay_date, status)
        VALUES ($1, $2, $3, CURRENT_DATE, 'COMPLETED')`,
       [Number(OR_ID), AMOUNT_US || 0, AMOUNT_KH || 0]
     );
@@ -1707,7 +1680,7 @@ app.post("/api/payments/record", async (req, res) => {
 });
 
 // ============================================
-// PURCHASE
+// PURCHASE - FIXED ✅
 // ============================================
 app.post("/api/purchase", async (req, res) => {
   const { CUSTOMER_ID, items, DISCOUNT = 0, STATUS = "Pending", EMP_PREPARE = 1, NOTES = "" } = req.body;
@@ -1723,7 +1696,7 @@ app.post("/api/purchase", async (req, res) => {
 
   try {
     const customerResult = await db.query(
-      "SELECT ID, CUS_ID FROM TBL_CUSTOMERS WHERE CUS_ID = $1",
+      "SELECT id, cus_id FROM tbl_customers WHERE cus_id = $1",
       [CUSTOMER_ID]
     );
 
@@ -1732,7 +1705,7 @@ app.post("/api/purchase", async (req, res) => {
     }
 
     const customer = customerResult.rows[0];
-    const numericCustomerId = customer.ID;
+    const numericCustomerId = customer.id;
 
     let totalAmount = 0;
     items.forEach((item) => {
@@ -1748,12 +1721,12 @@ app.post("/api/purchase", async (req, res) => {
     const orderNo = `PO-${Date.now()}`;
 
     const orderResult = await db.query(
-      `INSERT INTO TBL_ORDERS (ORDER_NO, CUSTOMER_ID, ORDER_DATE, AMOUNT_US, STATUS, EMP_PREPARE, DISCOUNT, NOTES)
-       VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6, $7) RETURNING OR_ID`,
+      `INSERT INTO tbl_orders (order_no, customer_id, order_date, amount_us, status, emp_prepare, discount, notes)
+       VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6, $7) RETURNING or_id`,
       [orderNo, numericCustomerId, totalAmount, STATUS || "Pending", EMP_PREPARE || 1, discountAmount, NOTES || ""]
     );
 
-    const orderId = orderResult.rows[0].OR_ID;
+    const orderId = orderResult.rows[0].or_id;
     console.log(`✅ Order created: ${orderNo} (ID: ${orderId})`);
 
     for (const item of items) {
@@ -1769,7 +1742,7 @@ app.post("/api/purchase", async (req, res) => {
       }
 
       const productResult = await db.query(
-        "SELECT ID FROM TBL_PRODUCTS WHERE PRODUCT_ID = $1",
+        "SELECT id FROM tbl_products WHERE product_id = $1",
         [productIdText]
       );
 
@@ -1778,17 +1751,17 @@ app.post("/api/purchase", async (req, res) => {
         continue;
       }
 
-      const numericProductId = productResult.rows[0].ID;
+      const numericProductId = productResult.rows[0].id;
 
       await db.query(
-        `INSERT INTO TBL_ORDERS_DETAILS (OR_ID, PRODUCT_ID, QTY_ORDER, PRICE, SUBTOTAL)
+        `INSERT INTO tbl_orders_details (or_id, product_id, qty_order, price, subtotal)
          VALUES ($1, $2, $3, $4, $5)`,
         [orderId, numericProductId, qty, price, subtotal]
       );
 
       await db.query(
-        `UPDATE Tbl_Stock SET QtyAvailable = QtyAvailable - $1, QtyInStock = QtyInStock - $1
-         WHERE ProductID = $2`,
+        `UPDATE tbl_stock SET qtyavailable = qtyavailable - $1, qtyinstock = qtyinstock - $1
+         WHERE productid = $2`,
         [qty, numericProductId]
       );
     }

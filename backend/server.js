@@ -19,6 +19,8 @@ const allowedOrigins = [
   'https://chheangsamnangs-projects.vercel.app',
   'https://spms-chh-sn-git-main-chheangsamnangs-projects.vercel.app',
   'https://spms-chh-sn.onrender.com',
+  // ✅ Allow ANY Vercel URL (fixes CORS for new deployments)
+  /\.vercel\.app$/,
   // Local development
   'http://localhost:5173',
   'http://localhost:3000',
@@ -32,12 +34,22 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    // Check if origin is allowed
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    // Check if origin is allowed (string match or regex match)
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (typeof allowed === 'string') {
+        return allowed === origin;
+      }
+      if (allowed instanceof RegExp) {
+        return allowed.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed) {
       callback(null, true);
     } else {
       console.log('❌ CORS blocked origin:', origin);
-      // ✅ FIXED: Allow all for testing (remove in production)
+      // ✅ Allow all for testing
       callback(null, true);
     }
   },
@@ -57,14 +69,13 @@ console.log('📊 Using PostgreSQL Database');
 console.log('✅ CORS allowed origins:', allowedOrigins);
 
 // ============================================
-// DATABASE TEST ENDPOINT - MOVED HERE ✅
+// DATABASE TEST ENDPOINT - SINGLE DEFINITION ✅
 // ============================================
 app.get("/api/db-test", async (req, res) => {
   try {
     console.log("🔍 Testing database connection...");
     const result = await db.query("SELECT NOW() as time, current_database() as db");
     
-    // Get list of tables
     const tables = await db.query(`
       SELECT table_name 
       FROM information_schema.tables 
@@ -358,7 +369,7 @@ app.delete("/api/customers/:id", async (req, res) => {
 });
 
 // ============================================
-// PRODUCTS - FIXED ✅
+// PRODUCTS - FULLY FIXED ✅
 // ============================================
 app.get("/api/products", async (req, res) => {
   const { search } = req.query;
@@ -399,48 +410,88 @@ app.get("/api/products/:id", async (req, res) => {
 });
 
 // ============================================
-// CREATE PRODUCT - SIMPLIFIED ✅
+// CREATE PRODUCT - FULLY FIXED ✅
 // ============================================
 app.post("/api/products", async (req, res) => {
   console.log("📝 CREATE PRODUCT - Request:", JSON.stringify(req.body, null, 2));
 
-  const { NAME_EN, NAME_KH, SALEOUT_PRICE, QTY_INSTOCK } = req.body;
+  const { 
+    NAME_EN, 
+    NAME_KH, 
+    BARCODE, 
+    BRAND, 
+    CATEGORY_ID, 
+    BUYIN_PRICE, 
+    SALEOUT_PRICE, 
+    QTY_ALERT, 
+    QTY_INSTOCK 
+  } = req.body;
 
-  // Validate
+  // Validate required fields
   if (!NAME_EN || NAME_EN.trim() === '') {
     return res.status(400).json({ error: "Product English name is required" });
   }
 
+  if (!NAME_KH || NAME_KH.trim() === '') {
+    return res.status(400).json({ error: "Product Khmer name is required" });
+  }
+
   try {
-    // Get next ID
+    // ✅ FIXED: Handle empty table case properly
     const maxIdResult = await db.query("SELECT MAX(PRODUCT_ID) as maxId FROM TBL_PRODUCTS");
+    console.log("📊 Max ID result:", maxIdResult.rows);
+    
     let nextNumber = 1;
-    if (maxIdResult.rows[0]?.maxId) {
-      const numPart = parseInt(String(maxIdResult.rows[0].maxId).replace(/[^0-9]/g, ""));
+    // ✅ Check if rows exist and maxId is not null
+    if (maxIdResult.rows && maxIdResult.rows.length > 0 && maxIdResult.rows[0]?.maxId) {
+      const currentId = maxIdResult.rows[0].maxId;
+      const numPart = parseInt(String(currentId).replace(/[^0-9]/g, ""));
       if (!isNaN(numPart)) nextNumber = numPart + 1;
     }
     const newProductId = `PROD${String(nextNumber).padStart(3, "0")}`;
+    console.log(`📦 Generated PRODUCT_ID: ${newProductId}`);
 
     // Insert product
     const result = await db.query(
       `INSERT INTO TBL_PRODUCTS 
-       (PRODUCT_ID, NAME_EN, NAME_KH, SALEOUT_PRICE, STATUS) 
-       VALUES ($1, $2, $3, $4, 'Active') 
+       (PRODUCT_ID, NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID, BUYIN_PRICE, SALEOUT_PRICE, QTY_ALERT, STATUS) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Active') 
        RETURNING ID`,
-      [newProductId, NAME_EN.trim(), NAME_KH.trim(), parseFloat(SALEOUT_PRICE) || 0]
+      [
+        newProductId, 
+        NAME_EN.trim(), 
+        NAME_KH.trim(), 
+        BARCODE?.trim() || null, 
+        BRAND?.trim() || null, 
+        CATEGORY_ID || null, 
+        parseFloat(BUYIN_PRICE) || 0, 
+        parseFloat(SALEOUT_PRICE) || 0, 
+        parseInt(QTY_ALERT) || 10
+      ]
     );
+
+    if (!result || !result.rows || result.rows.length === 0) {
+      throw new Error("Failed to create product - no ID returned");
+    }
 
     const productId = result.rows[0].id;
+    console.log(`✅ Product created with ID: ${productId}`);
 
-    // Insert stock
+    // Insert stock if QTY_INSTOCK is provided
     const qtyInStock = parseInt(QTY_INSTOCK) || 0;
-    await db.query(
-      `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable) 
-       VALUES ($1, $2, $3)`,
-      [productId, qtyInStock, qtyInStock]
-    );
+    if (qtyInStock > 0) {
+      try {
+        await db.query(
+          `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) 
+           VALUES ($1, $2, $3, $4)`,
+          [productId, qtyInStock, qtyInStock, 0]
+        );
+        console.log(`✅ Stock created for product: ${productId}`);
+      } catch (stockErr) {
+        console.warn("⚠️ Stock creation warning:", stockErr.message);
+      }
+    }
 
-    console.log(`✅ Product ${newProductId} created!`);
     res.json({
       product_id: newProductId,
       id: productId,
@@ -448,8 +499,9 @@ app.post("/api/products", async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Create product error:", err.message);
+    console.error("❌ Error stack:", err.stack);
     res.status(500).json({ 
-      error: err.message,
+      error: err.message || "Failed to create product",
       success: false
     });
   }
@@ -1792,37 +1844,7 @@ app.get("/", (req, res) => {
     }
   });
 });
-// ============================================
-// DATABASE TEST ENDPOINT
-// ============================================
-app.get("/api/db-test", async (req, res) => {
-  try {
-    console.log("🔍 Testing database connection...");
-    const result = await db.query("SELECT NOW() as time, current_database() as db");
-    
-    const tables = await db.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public'
-      ORDER BY table_name
-    `);
-    
-    res.json({
-      success: true,
-      connected: true,
-      database: result.rows[0],
-      tables: tables.rows.map(r => r.table_name),
-      message: "Database connection successful!"
-    });
-  } catch (err) {
-    console.error("❌ Database test error:", err.message);
-    res.status(500).json({
-      success: false,
-      connected: false,
-      error: err.message
-    });
-  }
-});
+
 // ============================================
 // 404 HANDLER
 // ============================================
@@ -1906,4 +1928,3 @@ startServer();
 // EXPORT for Vercel (Serverless)
 // ============================================
 module.exports = app;
-

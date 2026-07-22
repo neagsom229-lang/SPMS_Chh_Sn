@@ -8,7 +8,6 @@
     "dev": "nodemon server.js",
     "build": "npm install --production",
     "vercel-build": "npm install --production",
-    "postinstall": "npm install",
     "test": "echo 'No tests specified'"
   },
   "dependencies": {
@@ -24,25 +23,5 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "keywords": [
-    "spms",
-    "sale",
-    "product",
-    "management",
-    "api",
-    "backend",
-    "express",
-    "nodejs"
-  ],
-  "author": "Chheang Samnang",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/neagsom229-lang/SPMS_Chh_Sn.git"
-  },
-  "bugs": {
-    "url": "https://github.com/neagsom229-lang/SPMS_Chh_Sn/issues"
-  },
-  "homepage": "https://github.com/neagsom229-lang/SPMS_Chh_Sn#readme"
+  }
 }

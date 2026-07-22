@@ -1792,7 +1792,37 @@ app.get("/", (req, res) => {
     }
   });
 });
-
+// ============================================
+// DATABASE TEST ENDPOINT
+// ============================================
+app.get("/api/db-test", async (req, res) => {
+  try {
+    console.log("🔍 Testing database connection...");
+    const result = await db.query("SELECT NOW() as time, current_database() as db");
+    
+    const tables = await db.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `);
+    
+    res.json({
+      success: true,
+      connected: true,
+      database: result.rows[0],
+      tables: tables.rows.map(r => r.table_name),
+      message: "Database connection successful!"
+    });
+  } catch (err) {
+    console.error("❌ Database test error:", err.message);
+    res.status(500).json({
+      success: false,
+      connected: false,
+      error: err.message
+    });
+  }
+});
 // ============================================
 // 404 HANDLER
 // ============================================
@@ -1876,5 +1906,4 @@ startServer();
 // EXPORT for Vercel (Serverless)
 // ============================================
 module.exports = app;
- 
- 
+

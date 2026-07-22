@@ -24,6 +24,31 @@ const allowedOrigins = [
   'http://localhost:5000',
 ];
 
+// Add this test endpoint to check database connection
+app.get("/api/db-test", async (req, res) => {
+  try {
+    // Test connection
+    const result = await db.query("SELECT NOW() as time, current_database() as db");
+    res.json({
+      success: true,
+      connected: true,
+      database: result.rows[0],
+      tables: await db.query(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+        ORDER BY table_name
+      `)
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      stack: err.stack
+    });
+  }
+});
+
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl)
@@ -367,10 +392,11 @@ app.get("/api/products/:id", async (req, res) => {
 });
 
 // ============================================
-// CREATE PRODUCT - FIXED ✅
+// CREATE PRODUCT - DEBUG VERSION ✅
 // ============================================
 app.post("/api/products", async (req, res) => {
-  console.log("📝 Creating product - Request body:", JSON.stringify(req.body, null, 2));
+  console.log("📝 ===== CREATE PRODUCT ===== ");
+  console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
 
   const {
     NAME_EN,
@@ -384,18 +410,28 @@ app.post("/api/products", async (req, res) => {
     QTY_INSTOCK,
   } = req.body;
 
-  // ✅ FIXED: Better validation
+  // Validate required fields
   if (!NAME_EN || NAME_EN.trim() === '') {
+    console.log("❌ Missing NAME_EN");
     return res.status(400).json({ error: "Product English name is required" });
   }
 
   if (!NAME_KH || NAME_KH.trim() === '') {
+    console.log("❌ Missing NAME_KH");
     return res.status(400).json({ error: "Product Khmer name is required" });
   }
 
   try {
-    // ✅ FIXED: Get next ID with better handling
+    // Check database connection first
+    console.log("🔍 Testing database connection...");
+    await db.query("SELECT 1");
+    console.log("✅ Database connection OK");
+
+    // Get next PRODUCT_ID
+    console.log("🔍 Getting next PRODUCT_ID...");
     const maxIdResult = await db.query("SELECT MAX(PRODUCT_ID) as maxId FROM TBL_PRODUCTS");
+    console.log("📊 Max ID result:", maxIdResult.rows[0]);
+
     let nextNumber = 1;
     if (maxIdResult.rows[0]?.maxId) {
       const currentId = maxIdResult.rows[0].maxId;
@@ -405,12 +441,8 @@ app.post("/api/products", async (req, res) => {
     const newProductId = `PROD${String(nextNumber).padStart(3, "0")}`;
     console.log(`📦 Generated PRODUCT_ID: ${newProductId}`);
 
-    // ✅ FIXED: Better parameter handling
-    const buyPrice = parseFloat(BUYIN_PRICE) || 0;
-    const salePrice = parseFloat(SALEOUT_PRICE) || 0;
-    const qtyAlert = parseInt(QTY_ALERT) || 10;
-
-    // ✅ FIXED: Insert product first
+    // Insert product
+    console.log("🔍 Inserting product...");
     const result = await db.query(
       `INSERT INTO TBL_PRODUCTS 
        (PRODUCT_ID, NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID, BUYIN_PRICE, SALEOUT_PRICE, QTY_ALERT, STATUS) 
@@ -423,59 +455,59 @@ app.post("/api/products", async (req, res) => {
         BARCODE?.trim() || null, 
         BRAND?.trim() || null, 
         CATEGORY_ID || null, 
-        buyPrice, 
-        salePrice, 
-        qtyAlert
+        parseFloat(BUYIN_PRICE) || 0, 
+        parseFloat(SALEOUT_PRICE) || 0, 
+        parseInt(QTY_ALERT) || 10
       ]
     );
 
     if (!result || !result.rows || result.rows.length === 0) {
-      throw new Error("Failed to create product - no ID returned");
+      console.error("❌ No ID returned from insert");
+      return res.status(500).json({ error: "Failed to create product - no ID returned" });
     }
 
     const productId = result.rows[0].id;
-    console.log(`📦 Product created with numeric ID: ${productId}`);
+    console.log(`✅ Product created with ID: ${productId}`);
 
-    // ✅ FIXED: Insert stock with better error handling
-    const qtyInStock = parseInt(QTY_INSTOCK) || 0;
-    
-    // Check if Tbl_Stock exists
+    // Insert stock
     try {
-      const stockCheck = await db.query(`
-        SELECT EXISTS (
-          SELECT FROM information_schema.tables 
-          WHERE table_name = 'Tbl_Stock'
-        )
-      `);
-      
-      if (stockCheck.rows[0]?.exists) {
-        await db.query(
-          `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) 
-           VALUES ($1, $2, $3, $4)`,
-          [productId, qtyInStock, qtyInStock, 0]
-        );
-        console.log(`📦 Stock created for product: ${productId}`);
-      } else {
-        console.warn("⚠️ Tbl_Stock table does not exist - skipping stock creation");
-      }
+      console.log("🔍 Inserting stock...");
+      const qtyInStock = parseInt(QTY_INSTOCK) || 0;
+      await db.query(
+        `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) 
+         VALUES ($1, $2, $3, $4)`,
+        [productId, qtyInStock, qtyInStock, 0]
+      );
+      console.log(`✅ Stock created for product: ${productId}`);
     } catch (stockErr) {
-      console.warn("⚠️ Stock creation warning:", stockErr.message);
+      console.error("⚠️ Stock creation error:", stockErr.message);
       // Continue - product is created even if stock fails
     }
 
-    logActivity(req.body.user_id || 1, "Created product", "TBL_PRODUCTS", newProductId);
+    // Log activity (if function exists)
+    try {
+      if (typeof logActivity === 'function') {
+        logActivity(req.body.user_id || 1, "Created product", "TBL_PRODUCTS", newProductId);
+      }
+    } catch (logErr) {
+      console.warn("⚠️ Activity log warning:", logErr.message);
+    }
     
+    console.log(`✅ Product ${newProductId} created successfully!`);
     res.json({
       product_id: newProductId,
       id: productId,
       message: "Product created successfully",
     });
   } catch (err) {
-    console.error("❌ Create product error:", err.message);
+    console.error("❌ ===== CREATE PRODUCT ERROR =====");
+    console.error("❌ Error message:", err.message);
     console.error("❌ Error stack:", err.stack);
+    console.error("❌ Error details:", JSON.stringify(err, null, 2));
     res.status(500).json({ 
       error: err.message || "Failed to create product",
-      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      details: err.stack,
+      success: false
     });
   }
 });

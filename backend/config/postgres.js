@@ -7,11 +7,15 @@ dns.setDefaultResultOrder('ipv4first');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false
+    rejectUnauthorized: false,
+    require: true
   },
-  connectionTimeoutMillis: 15000,
+  connectionTimeoutMillis: 30000, // Increase timeout
   family: 4,
   keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+  max: 10,
+  idleTimeoutMillis: 30000,
 });
 
 pool.on('connect', () => {
@@ -29,6 +33,7 @@ const db = {
       return result;
     } catch (err) {
       console.error('❌ Query error:', err.message);
+      console.error('❌ Query text:', text);
       throw err;
     }
   },

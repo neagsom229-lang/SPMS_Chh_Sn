@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "build": "npm install --production",
     "vercel-build": "npm install --production",
+    "postinstall": "npm install",
     "test": "echo 'No tests specified'"
   },
   "dependencies": {

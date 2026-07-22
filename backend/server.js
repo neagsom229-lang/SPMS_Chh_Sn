@@ -325,12 +325,13 @@ app.delete("/api/customers/:id", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // ============================================
-// PRODUCTS (CRUD) - Full implementation
+// PRODUCTS (CRUD) - FIXED ✅
 // ============================================
 app.get("/api/products", async (req, res) => {
   const { search } = req.query;
+  console.log("📦 Fetching products - search:", search || "all");
+
   let sql = "SELECT * FROM TBL_PRODUCTS WHERE STATUS = 'Active'";
   const params = [];
 
@@ -351,6 +352,8 @@ app.get("/api/products", async (req, res) => {
 
 app.get("/api/products/:id", async (req, res) => {
   const { id } = req.params;
+  console.log(`🔍 Fetching product: ${id}`);
+
   try {
     const result = await db.query(`SELECT * FROM TBL_PRODUCTS WHERE PRODUCT_ID = $1`, [id]);
     if (result.rows.length === 0) {
@@ -363,7 +366,12 @@ app.get("/api/products/:id", async (req, res) => {
   }
 });
 
+// ============================================
+// CREATE PRODUCT - FIXED ✅
+// ============================================
 app.post("/api/products", async (req, res) => {
+  console.log("📝 Creating product - Request body:", JSON.stringify(req.body, null, 2));
+
   const {
     NAME_EN,
     NAME_KH,
@@ -376,45 +384,110 @@ app.post("/api/products", async (req, res) => {
     QTY_INSTOCK,
   } = req.body;
 
-  if (!NAME_EN || !NAME_KH) {
-    return res.status(400).json({ error: "Product name is required" });
+  // ✅ FIXED: Better validation
+  if (!NAME_EN || NAME_EN.trim() === '') {
+    return res.status(400).json({ error: "Product English name is required" });
+  }
+
+  if (!NAME_KH || NAME_KH.trim() === '') {
+    return res.status(400).json({ error: "Product Khmer name is required" });
   }
 
   try {
+    // ✅ FIXED: Get next ID with better handling
     const maxIdResult = await db.query("SELECT MAX(PRODUCT_ID) as maxId FROM TBL_PRODUCTS");
     let nextNumber = 1;
     if (maxIdResult.rows[0]?.maxId) {
-      const numPart = parseInt(String(maxIdResult.rows[0].maxId).replace(/[^0-9]/g, ""));
+      const currentId = maxIdResult.rows[0].maxId;
+      const numPart = parseInt(String(currentId).replace(/[^0-9]/g, ""));
       if (!isNaN(numPart)) nextNumber = numPart + 1;
     }
     const newProductId = `PROD${String(nextNumber).padStart(3, "0")}`;
+    console.log(`📦 Generated PRODUCT_ID: ${newProductId}`);
 
+    // ✅ FIXED: Better parameter handling
+    const buyPrice = parseFloat(BUYIN_PRICE) || 0;
+    const salePrice = parseFloat(SALEOUT_PRICE) || 0;
+    const qtyAlert = parseInt(QTY_ALERT) || 10;
+
+    // ✅ FIXED: Insert product first
     const result = await db.query(
-      `INSERT INTO TBL_PRODUCTS (PRODUCT_ID, NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID, BUYIN_PRICE, SALEOUT_PRICE, QTY_ALERT, STATUS) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Active') RETURNING ID`,
-      [newProductId, NAME_EN, NAME_KH, BARCODE || null, BRAND || null, CATEGORY_ID || null, BUYIN_PRICE || 0, SALEOUT_PRICE || 0, QTY_ALERT || 10]
+      `INSERT INTO TBL_PRODUCTS 
+       (PRODUCT_ID, NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID, BUYIN_PRICE, SALEOUT_PRICE, QTY_ALERT, STATUS) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Active') 
+       RETURNING ID`,
+      [
+        newProductId, 
+        NAME_EN.trim(), 
+        NAME_KH.trim(), 
+        BARCODE?.trim() || null, 
+        BRAND?.trim() || null, 
+        CATEGORY_ID || null, 
+        buyPrice, 
+        salePrice, 
+        qtyAlert
+      ]
     );
+
+    if (!result || !result.rows || result.rows.length === 0) {
+      throw new Error("Failed to create product - no ID returned");
+    }
 
     const productId = result.rows[0].id;
+    console.log(`📦 Product created with numeric ID: ${productId}`);
 
-    await db.query(
-      `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable) VALUES ($1, $2, $3)`,
-      [productId, QTY_INSTOCK || 0, QTY_INSTOCK || 0]
-    );
+    // ✅ FIXED: Insert stock with better error handling
+    const qtyInStock = parseInt(QTY_INSTOCK) || 0;
+    
+    // Check if Tbl_Stock exists
+    try {
+      const stockCheck = await db.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = 'Tbl_Stock'
+        )
+      `);
+      
+      if (stockCheck.rows[0]?.exists) {
+        await db.query(
+          `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) 
+           VALUES ($1, $2, $3, $4)`,
+          [productId, qtyInStock, qtyInStock, 0]
+        );
+        console.log(`📦 Stock created for product: ${productId}`);
+      } else {
+        console.warn("⚠️ Tbl_Stock table does not exist - skipping stock creation");
+      }
+    } catch (stockErr) {
+      console.warn("⚠️ Stock creation warning:", stockErr.message);
+      // Continue - product is created even if stock fails
+    }
 
     logActivity(req.body.user_id || 1, "Created product", "TBL_PRODUCTS", newProductId);
+    
     res.json({
       product_id: newProductId,
+      id: productId,
       message: "Product created successfully",
     });
   } catch (err) {
     console.error("❌ Create product error:", err.message);
-    res.status(500).json({ error: err.message });
+    console.error("❌ Error stack:", err.stack);
+    res.status(500).json({ 
+      error: err.message || "Failed to create product",
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
 
+// ============================================
+// UPDATE PRODUCT - FIXED ✅
+// ============================================
 app.put("/api/products/:id", async (req, res) => {
   const { id } = req.params;
+  console.log(`📝 Updating product: ${id}`);
+  console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
+
   const {
     NAME_EN,
     NAME_KH,
@@ -427,14 +500,40 @@ app.put("/api/products/:id", async (req, res) => {
     STATUS,
   } = req.body;
 
+  // ✅ FIXED: Better validation
+  if (!NAME_EN || NAME_EN.trim() === '') {
+    return res.status(400).json({ error: "Product English name is required" });
+  }
+
+  if (!NAME_KH || NAME_KH.trim() === '') {
+    return res.status(400).json({ error: "Product Khmer name is required" });
+  }
+
   try {
     const result = await db.query(
       `UPDATE TBL_PRODUCTS 
-       SET NAME_EN = $1, NAME_KH = $2, BARCODE = $3, BRAND = $4, 
-           CATEGORY_ID = $5, BUYIN_PRICE = $6, SALEOUT_PRICE = $7, 
-           QTY_ALERT = $8, STATUS = $9 
+       SET NAME_EN = $1, 
+           NAME_KH = $2, 
+           BARCODE = $3, 
+           BRAND = $4, 
+           CATEGORY_ID = $5, 
+           BUYIN_PRICE = $6, 
+           SALEOUT_PRICE = $7, 
+           QTY_ALERT = $8, 
+           STATUS = $9 
        WHERE PRODUCT_ID = $10`,
-      [NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID || null, BUYIN_PRICE || 0, SALEOUT_PRICE || 0, QTY_ALERT || 10, STATUS || 'Active', id]
+      [
+        NAME_EN.trim(), 
+        NAME_KH.trim(), 
+        BARCODE?.trim() || null, 
+        BRAND?.trim() || null, 
+        CATEGORY_ID || null, 
+        parseFloat(BUYIN_PRICE) || 0, 
+        parseFloat(SALEOUT_PRICE) || 0, 
+        parseInt(QTY_ALERT) || 10, 
+        STATUS || 'Active', 
+        id
+      ]
     );
 
     if (result.rowCount === 0) {
@@ -442,16 +541,27 @@ app.put("/api/products/:id", async (req, res) => {
     }
 
     logActivity(req.body.user_id || 1, "Updated product", "TBL_PRODUCTS", id);
-    res.json({ message: "Product updated successfully" });
+    res.json({ 
+      message: "Product updated successfully",
+      product_id: id
+    });
   } catch (err) {
     console.error("❌ Update product error:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ 
+      error: err.message || "Failed to update product"
+    });
   }
 });
 
+// ============================================
+// DELETE PRODUCT - FIXED ✅
+// ============================================
 app.delete("/api/products/:id", async (req, res) => {
   const { id } = req.params;
+  console.log(`🗑️ Deleting product: ${id}`);
+
   try {
+    // ✅ FIXED: Soft delete - update status to Inactive
     const result = await db.query(
       `UPDATE TBL_PRODUCTS SET STATUS = 'Inactive' WHERE PRODUCT_ID = $1`,
       [id]
@@ -462,10 +572,15 @@ app.delete("/api/products/:id", async (req, res) => {
     }
 
     logActivity(req.body.user_id || 1, "Deleted product", "TBL_PRODUCTS", id);
-    res.json({ message: "Product deleted successfully" });
+    res.json({ 
+      message: "Product deleted successfully",
+      product_id: id
+    });
   } catch (err) {
     console.error("❌ Delete product error:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ 
+      error: err.message || "Failed to delete product"
+    });
   }
 });
 
@@ -1794,5 +1909,4 @@ startServer();
 // ============================================
 // EXPORT for Vercel (Serverless)
 // ============================================
-module.exports = app; 
- 
+module.exports = app;

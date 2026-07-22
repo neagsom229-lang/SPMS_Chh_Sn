@@ -1,5 +1,3 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import axios from 'axios';
 import { 
   Search, Plus, Edit2, Trash2, Package, X, Save, 
   RefreshCw, AlertCircle, CheckCircle, Loader2,
@@ -7,9 +5,9 @@ import {
   TrendingUp, TrendingDown, DollarSign, ShoppingBag,
   BarChart3, Zap, Award, Star, Clock, AlertTriangle,
   ChevronRight, Eye, Copy, Tag, Layers, Box,
-  Sparkles, Gift, Shield
+  Sparkles, Gift, Shield,
+  FileText  // ← ADD THIS
 } from 'lucide-react';
-
 // ============================================
 // API CONFIGURATION - FIXED ✅
 // ============================================
@@ -187,44 +185,56 @@ const Products = () => {
   }, [search, fetchProducts]);
 
   // ===== HANDLE SUBMIT - FIXED ✅ =====
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setSubmitting(true);
+  
+  if (!formData.NAME_EN || !formData.SALEOUT_PRICE) {
+    showMessage('❌ Product name and sale price are required', 'error');
+    setSubmitting(false);
+    return;
+  }
+
+  try {
+    const payload = {
+      NAME_EN: formData.NAME_EN,
+      NAME_KH: formData.NAME_KH || '',
+      BARCODE: formData.BARCODE || '',
+      BRAND: formData.BRAND || '',
+      CATEGORY_ID: formData.CATEGORY_ID || null,
+      BUYIN_PRICE: parseFloat(formData.BUYIN_PRICE) || 0,
+      SALEOUT_PRICE: parseFloat(formData.SALEOUT_PRICE) || 0,
+      QTY_ALERT: parseInt(formData.QTY_ALERT) || 10,
+      QTY_INSTOCK: parseInt(formData.QTY_INSTOCK) || 0
+    };
+
+    let response;
+    if (editingProduct) {
+      response = await api.put(`/api/products/${editingProduct.PRODUCT_ID}`, payload);
+      showMessage('✅ Product updated successfully!');
+    } else {
+      response = await api.post('/api/products', payload);
+      showMessage('✅ Product created successfully!');
+    }
     
-    if (!formData.NAME_EN || !formData.SALEOUT_PRICE) {
-      showMessage('❌ Product name and sale price are required', 'error');
-      setSubmitting(false);
-      return;
+    // ✅ FIXED: Check response before accessing properties
+    if (response && response.data) {
+      console.log('✅ Product saved:', response.data);
     }
-
-    try {
-      const payload = {
-        ...formData,
-        BUYIN_PRICE: parseFloat(formData.BUYIN_PRICE) || 0,
-        SALEOUT_PRICE: parseFloat(formData.SALEOUT_PRICE) || 0,
-        QTY_ALERT: parseInt(formData.QTY_ALERT) || 10,
-        QTY_INSTOCK: parseInt(formData.QTY_INSTOCK) || 0
-      };
-
-      if (editingProduct) {
-        await api.put(`/api/products/${editingProduct.PRODUCT_ID}`, payload);
-        showMessage('✅ Product updated successfully!');
-      } else {
-        await api.post('/api/products', payload);
-        showMessage('✅ Product created successfully!');
-      }
-      
-      setShowModal(false);
-      setEditingProduct(null);
-      resetForm();
-      fetchProducts();
-    } catch (error) {
-      console.error('Submit error:', error.response?.data || error.message);
-      showMessage(`❌ ${error.response?.data?.error || 'Failed to save product'}`, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    
+    setShowModal(false);
+    setEditingProduct(null);
+    resetForm();
+    fetchProducts();
+  } catch (error) {
+    console.error('Submit error:', error.response?.data || error.message);
+    // ✅ FIXED: Better error message
+    const errorMsg = error.response?.data?.error || error.response?.data?.message || 'Failed to save product';
+    showMessage(`❌ ${errorMsg}`, 'error');
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   // ===== HANDLE DELETE - FIXED ✅ =====
   const handleDelete = useCallback(async (id) => {

@@ -18,36 +18,12 @@ const allowedOrigins = [
   'https://spms-chh-sn.vercel.app',
   'https://chheangsamnangs-projects.vercel.app',
   'https://spms-chh-sn-git-main-chheangsamnangs-projects.vercel.app',
+  'https://spms-chh-sn.onrender.com',
   // Local development
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:5000',
 ];
-
-// Add this test endpoint to check database connection
-app.get("/api/db-test", async (req, res) => {
-  try {
-    // Test connection
-    const result = await db.query("SELECT NOW() as time, current_database() as db");
-    res.json({
-      success: true,
-      connected: true,
-      database: result.rows[0],
-      tables: await db.query(`
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public'
-        ORDER BY table_name
-      `)
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: err.message,
-      stack: err.stack
-    });
-  }
-});
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -63,8 +39,6 @@ const corsOptions = {
       console.log('❌ CORS blocked origin:', origin);
       // ✅ FIXED: Allow all for testing (remove in production)
       callback(null, true);
-      // Uncomment below for strict mode:
-      // callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
@@ -81,6 +55,40 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 
 console.log('📊 Using PostgreSQL Database');
 console.log('✅ CORS allowed origins:', allowedOrigins);
+
+// ============================================
+// DATABASE TEST ENDPOINT - MOVED HERE ✅
+// ============================================
+app.get("/api/db-test", async (req, res) => {
+  try {
+    console.log("🔍 Testing database connection...");
+    const result = await db.query("SELECT NOW() as time, current_database() as db");
+    
+    // Get list of tables
+    const tables = await db.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `);
+    
+    res.json({
+      success: true,
+      connected: true,
+      database: result.rows[0],
+      tables: tables.rows.map(r => r.table_name),
+      message: "Database connection successful!"
+    });
+  } catch (err) {
+    console.error("❌ Database test error:", err.message);
+    res.status(500).json({
+      success: false,
+      connected: false,
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
 
 // ============================================
 // ACTIVITY LOG - IN-MEMORY STORAGE
@@ -164,7 +172,6 @@ app.post("/api/auth/login", async (req, res) => {
   }
 
   try {
-    // ✅ FIXED: Case insensitive username search
     const result = await db.query(
       `SELECT UserID, Username, Password, FullName, Role, Status 
        FROM Tbl_Users 
@@ -179,7 +186,6 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // ✅ FIXED: Compare password (plaintext for now - hash in production)
     if (user.Password !== password) {
       console.log("❌ Password incorrect for:", username);
       return res.status(401).json({ error: "Invalid credentials" });
@@ -350,8 +356,9 @@ app.delete("/api/customers/:id", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ============================================
-// PRODUCTS (CRUD) - FIXED ✅
+// PRODUCTS - FIXED ✅
 // ============================================
 app.get("/api/products", async (req, res) => {
   const { search } = req.query;
@@ -392,121 +399,57 @@ app.get("/api/products/:id", async (req, res) => {
 });
 
 // ============================================
-// CREATE PRODUCT - DEBUG VERSION ✅
+// CREATE PRODUCT - SIMPLIFIED ✅
 // ============================================
 app.post("/api/products", async (req, res) => {
-  console.log("📝 ===== CREATE PRODUCT ===== ");
-  console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
+  console.log("📝 CREATE PRODUCT - Request:", JSON.stringify(req.body, null, 2));
 
-  const {
-    NAME_EN,
-    NAME_KH,
-    BARCODE,
-    BRAND,
-    CATEGORY_ID,
-    BUYIN_PRICE,
-    SALEOUT_PRICE,
-    QTY_ALERT,
-    QTY_INSTOCK,
-  } = req.body;
+  const { NAME_EN, NAME_KH, SALEOUT_PRICE, QTY_INSTOCK } = req.body;
 
-  // Validate required fields
+  // Validate
   if (!NAME_EN || NAME_EN.trim() === '') {
-    console.log("❌ Missing NAME_EN");
     return res.status(400).json({ error: "Product English name is required" });
   }
 
-  if (!NAME_KH || NAME_KH.trim() === '') {
-    console.log("❌ Missing NAME_KH");
-    return res.status(400).json({ error: "Product Khmer name is required" });
-  }
-
   try {
-    // Check database connection first
-    console.log("🔍 Testing database connection...");
-    await db.query("SELECT 1");
-    console.log("✅ Database connection OK");
-
-    // Get next PRODUCT_ID
-    console.log("🔍 Getting next PRODUCT_ID...");
+    // Get next ID
     const maxIdResult = await db.query("SELECT MAX(PRODUCT_ID) as maxId FROM TBL_PRODUCTS");
-    console.log("📊 Max ID result:", maxIdResult.rows[0]);
-
     let nextNumber = 1;
     if (maxIdResult.rows[0]?.maxId) {
-      const currentId = maxIdResult.rows[0].maxId;
-      const numPart = parseInt(String(currentId).replace(/[^0-9]/g, ""));
+      const numPart = parseInt(String(maxIdResult.rows[0].maxId).replace(/[^0-9]/g, ""));
       if (!isNaN(numPart)) nextNumber = numPart + 1;
     }
     const newProductId = `PROD${String(nextNumber).padStart(3, "0")}`;
-    console.log(`📦 Generated PRODUCT_ID: ${newProductId}`);
 
     // Insert product
-    console.log("🔍 Inserting product...");
     const result = await db.query(
       `INSERT INTO TBL_PRODUCTS 
-       (PRODUCT_ID, NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID, BUYIN_PRICE, SALEOUT_PRICE, QTY_ALERT, STATUS) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Active') 
+       (PRODUCT_ID, NAME_EN, NAME_KH, SALEOUT_PRICE, STATUS) 
+       VALUES ($1, $2, $3, $4, 'Active') 
        RETURNING ID`,
-      [
-        newProductId, 
-        NAME_EN.trim(), 
-        NAME_KH.trim(), 
-        BARCODE?.trim() || null, 
-        BRAND?.trim() || null, 
-        CATEGORY_ID || null, 
-        parseFloat(BUYIN_PRICE) || 0, 
-        parseFloat(SALEOUT_PRICE) || 0, 
-        parseInt(QTY_ALERT) || 10
-      ]
+      [newProductId, NAME_EN.trim(), NAME_KH.trim(), parseFloat(SALEOUT_PRICE) || 0]
     );
 
-    if (!result || !result.rows || result.rows.length === 0) {
-      console.error("❌ No ID returned from insert");
-      return res.status(500).json({ error: "Failed to create product - no ID returned" });
-    }
-
     const productId = result.rows[0].id;
-    console.log(`✅ Product created with ID: ${productId}`);
 
     // Insert stock
-    try {
-      console.log("🔍 Inserting stock...");
-      const qtyInStock = parseInt(QTY_INSTOCK) || 0;
-      await db.query(
-        `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) 
-         VALUES ($1, $2, $3, $4)`,
-        [productId, qtyInStock, qtyInStock, 0]
-      );
-      console.log(`✅ Stock created for product: ${productId}`);
-    } catch (stockErr) {
-      console.error("⚠️ Stock creation error:", stockErr.message);
-      // Continue - product is created even if stock fails
-    }
+    const qtyInStock = parseInt(QTY_INSTOCK) || 0;
+    await db.query(
+      `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable) 
+       VALUES ($1, $2, $3)`,
+      [productId, qtyInStock, qtyInStock]
+    );
 
-    // Log activity (if function exists)
-    try {
-      if (typeof logActivity === 'function') {
-        logActivity(req.body.user_id || 1, "Created product", "TBL_PRODUCTS", newProductId);
-      }
-    } catch (logErr) {
-      console.warn("⚠️ Activity log warning:", logErr.message);
-    }
-    
-    console.log(`✅ Product ${newProductId} created successfully!`);
+    console.log(`✅ Product ${newProductId} created!`);
     res.json({
       product_id: newProductId,
       id: productId,
       message: "Product created successfully",
     });
   } catch (err) {
-    console.error("❌ ===== CREATE PRODUCT ERROR =====");
-    console.error("❌ Error message:", err.message);
-    console.error("❌ Error stack:", err.stack);
-    console.error("❌ Error details:", JSON.stringify(err, null, 2));
+    console.error("❌ Create product error:", err.message);
     res.status(500).json({ 
-      error: err.message || "Failed to create product",
-      details: err.stack,
+      error: err.message,
       success: false
     });
   }
@@ -518,7 +461,6 @@ app.post("/api/products", async (req, res) => {
 app.put("/api/products/:id", async (req, res) => {
   const { id } = req.params;
   console.log(`📝 Updating product: ${id}`);
-  console.log("📝 Request body:", JSON.stringify(req.body, null, 2));
 
   const {
     NAME_EN,
@@ -532,13 +474,8 @@ app.put("/api/products/:id", async (req, res) => {
     STATUS,
   } = req.body;
 
-  // ✅ FIXED: Better validation
   if (!NAME_EN || NAME_EN.trim() === '') {
     return res.status(400).json({ error: "Product English name is required" });
-  }
-
-  if (!NAME_KH || NAME_KH.trim() === '') {
-    return res.status(400).json({ error: "Product Khmer name is required" });
   }
 
   try {
@@ -585,15 +522,11 @@ app.put("/api/products/:id", async (req, res) => {
   }
 });
 
-// ============================================
-// DELETE PRODUCT - FIXED ✅
-// ============================================
 app.delete("/api/products/:id", async (req, res) => {
   const { id } = req.params;
   console.log(`🗑️ Deleting product: ${id}`);
 
   try {
-    // ✅ FIXED: Soft delete - update status to Inactive
     const result = await db.query(
       `UPDATE TBL_PRODUCTS SET STATUS = 'Inactive' WHERE PRODUCT_ID = $1`,
       [id]
@@ -869,7 +802,7 @@ app.get("/api/stock/product/:id", async (req, res) => {
 });
 
 // ============================================
-// SUPPLIERS - FIXED with better fallback
+// SUPPLIERS - FIXED
 // ============================================
 app.get("/api/suppliers", async (req, res) => {
   const { search } = req.query;
@@ -1838,7 +1771,7 @@ app.get("/api/test", async (req, res) => {
 });
 
 // ============================================
-// ROOT ENDPOINT - FIXED ✅
+// ROOT ENDPOINT
 // ============================================
 app.get("/", (req, res) => {
   res.json({
@@ -1854,13 +1787,14 @@ app.get("/", (req, res) => {
       users: "/api/users",
       analytics: "/api/analytics",
       reports: "/api/reports",
-      test: "/api/test"
+      test: "/api/test",
+      dbTest: "/api/db-test"
     }
   });
 });
 
 // ============================================
-// 404 HANDLER - FIXED ✅
+// 404 HANDLER
 // ============================================
 app.use((req, res) => {
   res.status(404).json({
@@ -1872,7 +1806,7 @@ app.use((req, res) => {
 });
 
 // ============================================
-// ERROR HANDLER - FIXED ✅
+// ERROR HANDLER
 // ============================================
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err.stack);

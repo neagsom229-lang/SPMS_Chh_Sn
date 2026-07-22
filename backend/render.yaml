@@ -1,21 +1,17 @@
+# render.yaml
 services:
   - type: web
     name: spms-backend
     runtime: node
-    repo: https://github.com/neagsom229-lang/SPMS_Chh_Sn
     plan: free
-    region: singapore
     buildCommand: cd backend && npm install
     startCommand: cd backend && node server.js
-    rootDir: backend
     envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 5000
-      - key: CORS_ORIGIN
-        value: https://spms-chh-sn-pro.vercel.app
-      - key: DB_PATH
-        value: ./database/spms.accdb
-      - key: RENDER
-        value: true

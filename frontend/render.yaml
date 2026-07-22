@@ -1,0 +1,11 @@
+# render.yaml
+services:
+  - type: web
+    name: spms-frontend
+    runtime: node
+    plan: free
+    buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && npm run preview
+    envVars:
+      - key: VITE_API_URL
+        value: https://spms-chh-sn.onrender.com

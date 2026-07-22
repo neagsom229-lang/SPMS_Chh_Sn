@@ -2,44 +2,26 @@ import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { 
-  User, 
-  Lock, 
-  Eye, 
-  EyeOff, 
-  LogIn, 
-  Shield, 
-  Sparkles,
-  Zap,
-  CheckCircle,
-  AlertCircle,
-  Loader2,
-  ArrowRight,
-  Building2,
-  Users,
-  Package,
-  ShoppingCart
+  User, Lock, Eye, EyeOff, LogIn, Shield, Sparkles,
+  Zap, CheckCircle, AlertCircle, Loader2, ArrowRight,
+  Building2, Users, Package, ShoppingCart
 } from 'lucide-react';
 
 // ============================================
-// API CONFIGURATION - FIXED
+// API CONFIGURATION - FIXED ✅
 // ============================================
-// Use relative URLs - Vite proxy handles forwarding
+const API_BASE = import.meta.env?.VITE_API_URL || '/api';
+
 const api = axios.create({
-  timeout: 15000,
+  baseURL: API_BASE,
+  timeout: 30000, // Increased timeout
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // Send cookies if needed
 });
 
-// For production (Render), use absolute URL
-const API_BASE = import.meta.env?.VITE_API_URL || '';
-
-// If API_BASE is set, use it; otherwise use relative URLs
-if (API_BASE) {
-  api.defaults.baseURL = API_BASE;
-}
-
-// Add request interceptor for debugging
+// Request interceptor
 api.interceptors.request.use(
   config => {
     console.log('📤 Login Request:', config.method?.toUpperCase(), config.url);
@@ -47,6 +29,24 @@ api.interceptors.request.use(
     return config;
   },
   error => Promise.reject(error)
+);
+
+// Response interceptor for better error handling
+api.interceptors.response.use(
+  response => {
+    console.log('📥 Login Response:', response.status);
+    return response;
+  },
+  error => {
+    if (error.response) {
+      console.error('❌ API Error:', error.response.status, error.response.data);
+    } else if (error.request) {
+      console.error('❌ No response from server. Please check your connection.');
+    } else {
+      console.error('❌ Request error:', error.message);
+    }
+    return Promise.reject(error);
+  }
 );
 
 // ============================================
@@ -120,15 +120,15 @@ const Login = ({ setUser }) => {
     }
   }, []);
 
-  // ===== HANDLE SUBMIT =====
+  // ===== HANDLE SUBMIT - FIXED ✅ =====
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      // ✅ FIXED: Removed '/api' prefix - just use '/auth/login'
-      const response = await api.post('/api/auth/login', { username, password });
+      // ✅ Use '/auth/login' (API_BASE already has /api)
+      const response = await api.post('/auth/login', { username, password });
       console.log('✅ Login response:', response.data);
       
       if (rememberMe) {
@@ -137,11 +137,20 @@ const Login = ({ setUser }) => {
         localStorage.removeItem('rememberedUser');
       }
       
+      // Store user data
+      localStorage.setItem('spms_user', JSON.stringify(response.data));
       setUser(response.data);
       navigate('/dashboard');
     } catch (err) {
-      console.error('❌ Login error:', err.response?.data || err.message);
-      setError(err.response?.data?.error || 'Invalid username or password');
+      console.error('❌ Login error:', err);
+      
+      if (err.response) {
+        setError(err.response?.data?.error || 'Invalid username or password');
+      } else if (err.request) {
+        setError('Cannot connect to server. Please check your internet connection.');
+      } else {
+        setError('An error occurred. Please try again.');
+      }
       
       // Shake animation on error
       if (containerRef.current) {
@@ -174,7 +183,6 @@ const Login = ({ setUser }) => {
   // ===== HANDLE KEYBOARD SHORTCUTS =====
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Ctrl+Enter to submit
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         handleSubmit(e);
       }
@@ -443,12 +451,8 @@ const Login = ({ setUser }) => {
         }
 
         @keyframes float {
-          0%, 100% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-8px);
-          }
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-8px); }
         }
 
         @keyframes shake {
@@ -474,18 +478,11 @@ const Login = ({ setUser }) => {
           animation: shake 0.5s ease-in-out;
         }
 
-        /* Glass morphism */
         .backdrop-blur-xl {
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
         }
 
-        /* Smooth transitions */
-        * {
-          -webkit-tap-highlight-color: transparent;
-        }
-
-        /* Custom scrollbar */
         ::-webkit-scrollbar {
           width: 4px;
         }
@@ -497,7 +494,6 @@ const Login = ({ setUser }) => {
           border-radius: 2px;
         }
 
-        /* Input autofill styles */
         input:-webkit-autofill,
         input:-webkit-autofill:hover,
         input:-webkit-autofill:focus {
@@ -506,7 +502,6 @@ const Login = ({ setUser }) => {
           transition: background-color 5000s ease-in-out 0s;
         }
 
-        /* Focus ring for accessibility */
         input:focus-visible {
           outline: 2px solid rgba(99, 102, 241, 0.5);
           outline-offset: 2px;
@@ -516,7 +511,4 @@ const Login = ({ setUser }) => {
   );
 };
 
-// ============================================
-// MEMOIZE EXPORT FOR PERFORMANCE
-// ============================================
 export default memo(Login);

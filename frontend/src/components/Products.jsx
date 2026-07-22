@@ -1,3 +1,5 @@
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import axios from 'axios';  // ← THIS IS CRITICAL - ADD THIS LINE
 import { 
   Search, Plus, Edit2, Trash2, Package, X, Save, 
   RefreshCw, AlertCircle, CheckCircle, Loader2,
@@ -6,8 +8,9 @@ import {
   BarChart3, Zap, Award, Star, Clock, AlertTriangle,
   ChevronRight, Eye, Copy, Tag, Layers, Box,
   Sparkles, Gift, Shield,
-  FileText  // ← ADD THIS
+  FileText
 } from 'lucide-react';
+
 // ============================================
 // API CONFIGURATION - FIXED ✅
 // ============================================
@@ -94,7 +97,7 @@ const Products = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // ===== FETCH PRODUCTS - FIXED ✅ =====
+  // ===== FETCH PRODUCTS =====
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -184,59 +187,77 @@ const Products = () => {
     };
   }, [search, fetchProducts]);
 
-  // ===== HANDLE SUBMIT - FIXED ✅ =====
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setSubmitting(true);
-  
-  if (!formData.NAME_EN || !formData.SALEOUT_PRICE) {
-    showMessage('❌ Product name and sale price are required', 'error');
-    setSubmitting(false);
-    return;
-  }
-
-  try {
-    const payload = {
-      NAME_EN: formData.NAME_EN,
-      NAME_KH: formData.NAME_KH || '',
-      BARCODE: formData.BARCODE || '',
-      BRAND: formData.BRAND || '',
-      CATEGORY_ID: formData.CATEGORY_ID || null,
-      BUYIN_PRICE: parseFloat(formData.BUYIN_PRICE) || 0,
-      SALEOUT_PRICE: parseFloat(formData.SALEOUT_PRICE) || 0,
-      QTY_ALERT: parseInt(formData.QTY_ALERT) || 10,
-      QTY_INSTOCK: parseInt(formData.QTY_INSTOCK) || 0
-    };
-
-    let response;
-    if (editingProduct) {
-      response = await api.put(`/api/products/${editingProduct.PRODUCT_ID}`, payload);
-      showMessage('✅ Product updated successfully!');
-    } else {
-      response = await api.post('/api/products', payload);
-      showMessage('✅ Product created successfully!');
+  // ===== HANDLE SUBMIT - COMPLETELY REWRITTEN ✅ =====
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    
+    // Validate required fields
+    if (!formData.NAME_EN || formData.NAME_EN.trim() === '') {
+      showMessage('❌ Product English name is required', 'error');
+      setSubmitting(false);
+      return;
     }
     
-    // ✅ FIXED: Check response before accessing properties
-    if (response && response.data) {
-      console.log('✅ Product saved:', response.data);
+    if (!formData.NAME_KH || formData.NAME_KH.trim() === '') {
+      showMessage('❌ Product Khmer name is required', 'error');
+      setSubmitting(false);
+      return;
     }
-    
-    setShowModal(false);
-    setEditingProduct(null);
-    resetForm();
-    fetchProducts();
-  } catch (error) {
-    console.error('Submit error:', error.response?.data || error.message);
-    // ✅ FIXED: Better error message
-    const errorMsg = error.response?.data?.error || error.response?.data?.message || 'Failed to save product';
-    showMessage(`❌ ${errorMsg}`, 'error');
-  } finally {
-    setSubmitting(false);
-  }
-};
 
-  // ===== HANDLE DELETE - FIXED ✅ =====
+    if (!formData.SALEOUT_PRICE || parseFloat(formData.SALEOUT_PRICE) <= 0) {
+      showMessage('❌ Valid sale price is required', 'error');
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      // Build payload with proper data types
+      const payload = {
+        NAME_EN: formData.NAME_EN.trim(),
+        NAME_KH: formData.NAME_KH.trim(),
+        BARCODE: formData.BARCODE?.trim() || '',
+        BRAND: formData.BRAND?.trim() || '',
+        CATEGORY_ID: formData.CATEGORY_ID || null,
+        BUYIN_PRICE: parseFloat(formData.BUYIN_PRICE) || 0,
+        SALEOUT_PRICE: parseFloat(formData.SALEOUT_PRICE) || 0,
+        QTY_ALERT: parseInt(formData.QTY_ALERT) || 10,
+        QTY_INSTOCK: parseInt(formData.QTY_INSTOCK) || 0
+      };
+
+      console.log('📤 Sending product data:', payload);
+
+      let response;
+      if (editingProduct) {
+        response = await api.put(`/api/products/${editingProduct.PRODUCT_ID}`, payload);
+        showMessage('✅ Product updated successfully!');
+      } else {
+        response = await api.post('/api/products', payload);
+        showMessage('✅ Product created successfully!');
+      }
+      
+      console.log('📥 Server response:', response.data);
+      
+      setShowModal(false);
+      setEditingProduct(null);
+      resetForm();
+      fetchProducts();
+    } catch (error) {
+      console.error('❌ Submit error:', error);
+      console.error('❌ Error response:', error.response?.data);
+      
+      // Get error message from response
+      const errorMsg = error.response?.data?.error || 
+                       error.response?.data?.message || 
+                       error.message || 
+                       'Failed to save product';
+      showMessage(`❌ ${errorMsg}`, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ===== HANDLE DELETE =====
   const handleDelete = useCallback(async (id) => {
     if (!window.confirm('Are you sure you want to delete this product?')) return;
     
@@ -250,7 +271,7 @@ const handleSubmit = async (e) => {
     }
   }, [fetchProducts, showMessage]);
 
-  // ===== BULK DELETE - FIXED ✅ =====
+  // ===== BULK DELETE =====
   const handleBulkDelete = useCallback(async () => {
     if (selectedProducts.length === 0) return;
     if (!window.confirm(`Delete ${selectedProducts.length} selected products?`)) return;
@@ -271,9 +292,15 @@ const handleSubmit = async (e) => {
   // ===== RESET FORM =====
   const resetForm = useCallback(() => {
     setFormData({ 
-      NAME_EN: '', NAME_KH: '', BARCODE: '', BRAND: '', 
-      CATEGORY_ID: '', BUYIN_PRICE: '', SALEOUT_PRICE: '', 
-      QTY_ALERT: '10', QTY_INSTOCK: '0' 
+      NAME_EN: '', 
+      NAME_KH: '', 
+      BARCODE: '', 
+      BRAND: '', 
+      CATEGORY_ID: '', 
+      BUYIN_PRICE: '', 
+      SALEOUT_PRICE: '', 
+      QTY_ALERT: '10', 
+      QTY_INSTOCK: '0' 
     });
   }, []);
 

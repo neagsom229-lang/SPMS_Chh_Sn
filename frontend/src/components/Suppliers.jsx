@@ -1186,4 +1186,5 @@ const Suppliers = () => {
   );
 };
 
-export default Suppliers;
+export default Suppliers; 
+ 

@@ -10,12 +10,10 @@ const pool = new Pool({
     rejectUnauthorized: false
   },
   connectionTimeoutMillis: 15000,
-  // Force IPv4
   family: 4,
   keepAlive: true,
 });
 
-// Log connection attempts
 pool.on('connect', () => {
   console.log('✅ PostgreSQL connected successfully');
 });

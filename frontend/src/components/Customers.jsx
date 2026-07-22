@@ -100,7 +100,7 @@ const Customers = () => {
     setLoading(true);
     try {
       // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('/customers', { 
+      const res = await api.get('/api/customers', { 
         params: { search: search || undefined } 
       });
       if (isMounted.current) {
@@ -198,11 +198,11 @@ const Customers = () => {
       if (editingCustomer) {
         const customerId = editingCustomer.CUS_ID || editingCustomer.cus_id || editingCustomer.ID;
         // ✅ FIXED: Removed '/api' prefix
-        await api.put(`/customers/${customerId}`, submitData);
+        await api.put(`/api/customers/${customerId}`, submitData);
         showMessage('✅ Customer updated successfully!');
       } else {
         // ✅ FIXED: Removed '/api' prefix
-        await api.post('/customers', submitData);
+        await api.post('/api/customers', submitData);
         showMessage('✅ Customer created successfully!');
       }
       
@@ -224,7 +224,7 @@ const Customers = () => {
     
     try {
       // ✅ FIXED: Removed '/api' prefix
-      await api.delete(`/customers/${id}`);
+      await api.delete(`/api/customers/${id}`);
       showMessage('✅ Customer deleted successfully!');
       fetchCustomers();
     } catch (error) {
@@ -241,7 +241,7 @@ const Customers = () => {
     try {
       for (const id of selectedCustomers) {
         // ✅ FIXED: Removed '/api' prefix
-        await api.delete(`/customers/${id}`);
+        await api.delete(`/api/customers/${id}`);
       }
       showMessage(`✅ ${selectedCustomers.length} customers deleted!`);
       setSelectedCustomers([]);

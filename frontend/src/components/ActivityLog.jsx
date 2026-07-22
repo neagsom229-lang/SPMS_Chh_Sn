@@ -85,7 +85,7 @@ const ActivityLog = () => {
     setIsRefreshing(true);
     try {
       // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('/activity-logs', {
+      const res = await api.get('/api/activity-logs', {
         params: { limit: 200 }
       });
       if (isMounted.current) {
@@ -113,7 +113,7 @@ const ActivityLog = () => {
   const fetchUsers = useCallback(async () => {
     try {
       // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('/users');
+      const res = await api.get('/api/users');
       if (isMounted.current) {
         setUsers(res.data || []);
       }

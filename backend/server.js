@@ -3,13 +3,13 @@ require('dotenv').config();
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const dbModule = require("./config/database");
+const db = require("./config/postgres");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ============================================
-// CORS CONFIGURATION - FIXED
+// CORS CONFIGURATION
 // ============================================
 const allowedOrigins = [
   'https://spms-chh-sn-pro.vercel.app',
@@ -40,7 +40,7 @@ app.options('*', cors(corsOptions));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-console.log('📊 Using Microsoft Access Database');
+console.log('📊 Using PostgreSQL Database');
 console.log('✅ CORS allowed origins:', allowedOrigins);
 
 // ============================================
@@ -70,21 +70,42 @@ const logActivity = (userId, action, tableName, recordId = null) => {
   }
 };
 
-app.get("/api/activity-logs", (req, res) => {
+// ============================================
+// HELPER FUNCTIONS FOR POSTGRESQL
+// ============================================
+function toPostgresArray(items) {
+  if (!items || !Array.isArray(items)) return '[]';
+  return JSON.stringify(items);
+}
+
+function fromPostgresArray(data) {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  try { return JSON.parse(data); } catch { return []; }
+}
+
+// ============================================
+// ACTIVITY LOGS
+// ============================================
+app.get("/api/activity-logs", async (req, res) => {
   const { limit = 50 } = req.query;
   const logs = activityLogs.slice(0, Number(limit));
-  dbModule.all("SELECT UserID, Username FROM Tbl_Users", [], (err, users) => {
-    if (!err && users) {
-      const userMap = {};
-      users.forEach((u) => {
-        userMap[u.UserID] = u.Username;
-      });
-      logs.forEach((log) => {
-        log.username = userMap[log.user_id] || "Unknown";
-      });
-    }
+  
+  try {
+    const result = await db.query("SELECT UserID, Username FROM Tbl_Users");
+    const users = result.rows || [];
+    const userMap = {};
+    users.forEach((u) => {
+      userMap[u.UserID] = u.Username;
+    });
+    logs.forEach((log) => {
+      log.username = userMap[log.user_id] || "Unknown";
+    });
     res.json(logs);
-  });
+  } catch (err) {
+    console.error("❌ Activity logs error:", err.message);
+    res.json(logs);
+  }
 });
 
 app.delete("/api/activity-logs", (req, res) => {
@@ -95,27 +116,20 @@ app.delete("/api/activity-logs", (req, res) => {
 // ============================================
 // AUTHENTICATION
 // ============================================
-
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   const { username, password } = req.body;
   console.log("🔑 Login attempt:", username);
 
-  const safeUsername = username.replace(/'/g, "''");
-  const safePassword = password.replace(/'/g, "''");
+  try {
+    const result = await db.query(
+      `SELECT UserID, Username, Password, Role, Status 
+       FROM Tbl_Users 
+       WHERE Username = $1 AND Password = $2 AND Status = 'ACTIVE'`,
+      [username, password]
+    );
 
-  const sql = `
-    SELECT UserID, Username, Password, Role, Status 
-    FROM Tbl_Users 
-    WHERE Username = '${safeUsername}' 
-    AND Password = '${safePassword}' 
-    AND Status = 'ACTIVE'
-  `;
+    const user = result.rows[0];
 
-  dbModule.get(sql, [], (err, user) => {
-    if (err) {
-      console.error("❌ Login error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
     if (!user) {
       console.log("❌ User not found");
       return res.status(401).json({ error: "Invalid credentials" });
@@ -126,7 +140,6 @@ app.post("/api/auth/login", (req, res) => {
 
     logActivity(user.UserID, "Login", "Tbl_Users", user.UserID);
 
-    delete user.Password;
     res.json({
       user_id: user.UserID,
       username: user.Username,
@@ -134,237 +147,198 @@ app.post("/api/auth/login", (req, res) => {
       role_name: user.Role || "Cashier",
       status: user.Status,
     });
-  });
+  } catch (err) {
+    console.error("❌ Login error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // DASHBOARD STATS
 // ============================================
+app.get("/api/dashboard/stats", async (req, res) => {
+  try {
+    const queries = [
+      db.query("SELECT COUNT(*) as count FROM TBL_CUSTOMERS WHERE STATUS = 'Active'"),
+      db.query("SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'"),
+      db.query("SELECT COUNT(*) as count FROM TBL_ORDERS"),
+      db.query("SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue FROM TBL_ORDERS"),
+      db.query("SELECT COUNT(*) as count FROM Tbl_Stock WHERE QtyAvailable <= 5"),
+      db.query("SELECT COUNT(*) as count FROM TBL_ORDERS WHERE STATUS = 'Pending'")
+    ];
 
-app.get("/api/dashboard/stats", (req, res) => {
-  let stats = {
-    totalCustomers: 0,
-    totalProducts: 0,
-    totalOrders: 0,
-    totalRevenue: 0,
-    lowStockItems: 0,
-    pendingOrders: 0,
-  };
-  let completed = 0;
+    const results = await Promise.all(queries);
+    
+    const stats = {
+      totalCustomers: parseInt(results[0].rows[0]?.count || 0),
+      totalProducts: parseInt(results[1].rows[0]?.count || 0),
+      totalOrders: parseInt(results[2].rows[0]?.count || 0),
+      totalRevenue: parseFloat(results[3].rows[0]?.revenue || 0),
+      lowStockItems: parseInt(results[4].rows[0]?.count || 0),
+      pendingOrders: parseInt(results[5].rows[0]?.count || 0),
+    };
 
-  const checkComplete = () => {
-    if (completed === 6) {
-      res.json(stats);
-    }
-  };
-
-  dbModule.get("SELECT COUNT(*) as count FROM TBL_CUSTOMERS WHERE STATUS = 'Active'", [], (err, r) => {
-    stats.totalCustomers = r?.count || 0;
-    completed++;
-    checkComplete();
-  });
-
-  dbModule.get("SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'", [], (err, r) => {
-    stats.totalProducts = r?.count || 0;
-    completed++;
-    checkComplete();
-  });
-
-  dbModule.get("SELECT COUNT(*) as count FROM TBL_ORDERS", [], (err, r) => {
-    stats.totalOrders = r?.count || 0;
-    completed++;
-    checkComplete();
-  });
-
-  dbModule.get("SELECT SUM(AMOUNT_US) as revenue FROM TBL_ORDERS", [], (err, r) => {
-    stats.totalRevenue = r?.revenue || 0;
-    completed++;
-    checkComplete();
-  });
-
-  dbModule.get("SELECT COUNT(*) as count FROM Tbl_Stock WHERE QtyAvailable <= 5", [], (err, r) => {
-    stats.lowStockItems = r?.count || 0;
-    completed++;
-    checkComplete();
-  });
-
-  dbModule.get("SELECT COUNT(*) as count FROM TBL_ORDERS WHERE STATUS = 'Pending'", [], (err, r) => {
-    stats.pendingOrders = r?.count || 0;
-    completed++;
-    checkComplete();
-  });
+    res.json(stats);
+  } catch (err) {
+    console.error("❌ Dashboard stats error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // CUSTOMERS (CRUD)
 // ============================================
-
-app.get("/api/customers", (req, res) => {
+app.get("/api/customers", async (req, res) => {
   const { search } = req.query;
   let sql = "SELECT * FROM TBL_CUSTOMERS WHERE STATUS = 'Active'";
+  const params = [];
 
   if (search) {
-    const safeSearch = search.replace(/'/g, "''");
-    sql += ` AND (FIRST_NAME LIKE '%${safeSearch}%' OR LAST_NAME LIKE '%${safeSearch}%' OR PHONE LIKE '%${safeSearch}%' OR E_MAIL LIKE '%${safeSearch}%')`;
+    sql += ` AND (FIRST_NAME ILIKE $1 OR LAST_NAME ILIKE $1 OR PHONE ILIKE $1 OR E_MAIL ILIKE $1)`;
+    params.push(`%${search}%`);
   }
 
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Customers error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`👥 Customers found: ${rows.length}`);
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(sql, params);
+    console.log(`👥 Customers found: ${result.rows.length}`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Customers error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get("/api/customers/:id", (req, res) => {
+app.get("/api/customers/:id", async (req, res) => {
   const { id } = req.params;
-  dbModule.get(`SELECT * FROM TBL_CUSTOMERS WHERE CUS_ID = '${id}'`, [], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: "Customer not found" });
-    res.json(row);
-  });
+  try {
+    const result = await db.query(`SELECT * FROM TBL_CUSTOMERS WHERE CUS_ID = $1`, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("❌ Customer error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post("/api/customers", (req, res) => {
+app.post("/api/customers", async (req, res) => {
   const { FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE } = req.body;
 
   if (!FIRST_NAME || !LAST_NAME) {
     return res.status(400).json({ error: "First name and last name are required" });
   }
 
-  const safeFirstName = (FIRST_NAME || "").replace(/'/g, "''");
-  const safeLastName = (LAST_NAME || "").replace(/'/g, "''");
-  const safePhone = (PHONE || "").replace(/'/g, "''");
-  const safeEmail = (E_MAIL || "").replace(/'/g, "''");
-  const safeAddress = (ADDRESS || "").replace(/'/g, "''");
-  const balance = BALANCE || 0;
-
-  const getNextIdSql = `SELECT MAX(CUS_ID) as maxId FROM TBL_CUSTOMERS`;
-
-  dbModule.get(getNextIdSql, [], (err, result) => {
-    if (err) {
-      console.error("❌ Get next ID error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-
+  try {
+    // Get next ID
+    const maxIdResult = await db.query("SELECT MAX(CUS_ID) as maxId FROM TBL_CUSTOMERS");
     let nextNumber = 1;
-    if (result && result.maxId) {
-      const currentId = result.maxId;
-      const numPart = parseInt(currentId.replace(/[^0-9]/g, ""));
-      if (!isNaN(numPart)) {
-        nextNumber = numPart + 1;
-      }
+    if (maxIdResult.rows[0]?.maxId) {
+      const numPart = parseInt(maxIdResult.rows[0].maxId.replace(/[^0-9]/g, ""));
+      if (!isNaN(numPart)) nextNumber = numPart + 1;
     }
     const newCusId = `CUS${String(nextNumber).padStart(3, "0")}`;
-    console.log(`🔑 Generated CUS_ID: ${newCusId}`);
 
-    const sql = `
-      INSERT INTO TBL_CUSTOMERS (CUS_ID, FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE, STATUS) 
-      VALUES ('${newCusId}', '${safeFirstName}', '${safeLastName}', '${safePhone}', '${safeEmail}', '${safeAddress}', ${balance}, 'Active')
-    `;
+    const result = await db.query(
+      `INSERT INTO TBL_CUSTOMERS (CUS_ID, FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE, STATUS) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active') RETURNING CUS_ID`,
+      [newCusId, FIRST_NAME, LAST_NAME, PHONE || null, E_MAIL || null, ADDRESS || null, BALANCE || 0]
+    );
 
-    console.log("📝 SQL:", sql);
-
-    dbModule.run(sql, [], function (err) {
-      if (err) {
-        console.error("❌ Create customer error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-
-      logActivity(req.body.user_id || 1, "Created customer", "TBL_CUSTOMERS", newCusId);
-      res.json({
-        cus_id: newCusId,
-        message: "Customer created successfully",
-      });
+    logActivity(req.body.user_id || 1, "Created customer", "TBL_CUSTOMERS", newCusId);
+    res.json({
+      cus_id: newCusId,
+      message: "Customer created successfully",
     });
-  });
+  } catch (err) {
+    console.error("❌ Create customer error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put("/api/customers/:id", (req, res) => {
+app.put("/api/customers/:id", async (req, res) => {
   const { id } = req.params;
   const { FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE, STATUS } = req.body;
 
-  const safeFirstName = (FIRST_NAME || "").replace(/'/g, "''");
-  const safeLastName = (LAST_NAME || "").replace(/'/g, "''");
-  const safePhone = (PHONE || "").replace(/'/g, "''");
-  const safeEmail = (E_MAIL || "").replace(/'/g, "''");
-  const safeAddress = (ADDRESS || "").replace(/'/g, "''");
-  const safeStatus = (STATUS || "Active").replace(/'/g, "''");
-  const balance = BALANCE || 0;
+  try {
+    const result = await db.query(
+      `UPDATE TBL_CUSTOMERS 
+       SET FIRST_NAME = $1, LAST_NAME = $2, PHONE = $3, E_MAIL = $4, 
+           ADDRESS = $5, BALANCE = $6, STATUS = $7 
+       WHERE CUS_ID = $8`,
+      [FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, BALANCE || 0, STATUS || 'Active', id]
+    );
 
-  const sql = `
-    UPDATE TBL_CUSTOMERS 
-    SET FIRST_NAME = '${safeFirstName}', 
-        LAST_NAME = '${safeLastName}', 
-        PHONE = '${safePhone}', 
-        E_MAIL = '${safeEmail}', 
-        ADDRESS = '${safeAddress}', 
-        BALANCE = ${balance}, 
-        STATUS = '${safeStatus}' 
-    WHERE CUS_ID = '${id}'
-  `;
-
-  dbModule.run(sql, [], function (err) {
-    if (err) {
-      console.error("❌ Update customer error:", err.message);
-      return res.status(500).json({ error: err.message });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Customer not found" });
     }
-    if (this.changes === 0) return res.status(404).json({ error: "Customer not found" });
 
     logActivity(req.body.user_id || 1, "Updated customer", "TBL_CUSTOMERS", id);
     res.json({ message: "Customer updated successfully" });
-  });
+  } catch (err) {
+    console.error("❌ Update customer error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete("/api/customers/:id", (req, res) => {
+app.delete("/api/customers/:id", async (req, res) => {
   const { id } = req.params;
-  dbModule.run(`UPDATE TBL_CUSTOMERS SET STATUS = 'Inactive' WHERE CUS_ID = '${id}'`, [], function (err) {
-    if (err) {
-      console.error("❌ Delete customer error:", err.message);
-      return res.status(500).json({ error: err.message });
+  try {
+    const result = await db.query(
+      `UPDATE TBL_CUSTOMERS SET STATUS = 'Inactive' WHERE CUS_ID = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Customer not found" });
     }
-    if (this.changes === 0) return res.status(404).json({ error: "Customer not found" });
 
     logActivity(req.body.user_id || 1, "Deleted customer", "TBL_CUSTOMERS", id);
     res.json({ message: "Customer deleted successfully" });
-  });
+  } catch (err) {
+    console.error("❌ Delete customer error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // PRODUCTS (CRUD)
 // ============================================
-
-app.get("/api/products", (req, res) => {
+app.get("/api/products", async (req, res) => {
   const { search } = req.query;
   let sql = "SELECT * FROM TBL_PRODUCTS WHERE STATUS = 'Active'";
+  const params = [];
 
   if (search) {
-    const safeSearch = search.replace(/'/g, "''");
-    sql += ` AND (NAME_EN LIKE '%${safeSearch}%' OR NAME_KH LIKE '%${safeSearch}%' OR BARCODE LIKE '%${safeSearch}%')`;
+    sql += ` AND (NAME_EN ILIKE $1 OR NAME_KH ILIKE $1 OR BARCODE ILIKE $1)`;
+    params.push(`%${search}%`);
   }
 
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Products error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`📦 Products found: ${rows.length}`);
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(sql, params);
+    console.log(`📦 Products found: ${result.rows.length}`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Products error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get("/api/products/:id", (req, res) => {
+app.get("/api/products/:id", async (req, res) => {
   const { id } = req.params;
-  dbModule.get(`SELECT * FROM TBL_PRODUCTS WHERE PRODUCT_ID = '${id}'`, [], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    if (!row) return res.status(404).json({ error: "Product not found" });
-    res.json(row);
-  });
+  try {
+    const result = await db.query(`SELECT * FROM TBL_PRODUCTS WHERE PRODUCT_ID = $1`, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("❌ Product error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post("/api/products", (req, res) => {
+app.post("/api/products", async (req, res) => {
   const {
     NAME_EN,
     NAME_KH,
@@ -381,68 +355,41 @@ app.post("/api/products", (req, res) => {
     return res.status(400).json({ error: "Product name is required" });
   }
 
-  const safeNameEn = (NAME_EN || "").replace(/'/g, "''");
-  const safeNameKh = (NAME_KH || "").replace(/'/g, "''");
-  const safeBarcode = (BARCODE || "").replace(/'/g, "''");
-  const safeBrand = (BRAND || "").replace(/'/g, "''");
-  const buyPrice = BUYIN_PRICE || 0;
-  const salePrice = SALEOUT_PRICE || 0;
-  const qtyAlert = QTY_ALERT || 10;
-
-  const getNextIdSql = `SELECT MAX(PRODUCT_ID) as maxId FROM TBL_PRODUCTS`;
-
-  dbModule.get(getNextIdSql, [], (err, result) => {
-    if (err) {
-      console.error("❌ Get next product ID error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-
+  try {
+    // Get next ID
+    const maxIdResult = await db.query("SELECT MAX(PRODUCT_ID) as maxId FROM TBL_PRODUCTS");
     let nextNumber = 1;
-    if (result && result.maxId) {
-      const numPart = parseInt(String(result.maxId).replace(/[^0-9]/g, ""));
-      if (!isNaN(numPart)) {
-        nextNumber = numPart + 1;
-      }
+    if (maxIdResult.rows[0]?.maxId) {
+      const numPart = parseInt(String(maxIdResult.rows[0].maxId).replace(/[^0-9]/g, ""));
+      if (!isNaN(numPart)) nextNumber = numPart + 1;
     }
     const newProductId = `PROD${String(nextNumber).padStart(3, "0")}`;
-    console.log(`🔑 Generated PRODUCT_ID: ${newProductId}`);
 
-    const sql = `
-      INSERT INTO TBL_PRODUCTS (PRODUCT_ID, NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID, BUYIN_PRICE, SALEOUT_PRICE, QTY_ALERT, STATUS) 
-      VALUES ('${newProductId}', '${safeNameEn}', '${safeNameKh}', '${safeBarcode}', '${safeBrand}', ${CATEGORY_ID || "NULL"}, ${buyPrice}, ${salePrice}, ${qtyAlert}, 'Active')
-    `;
+    const result = await db.query(
+      `INSERT INTO TBL_PRODUCTS (PRODUCT_ID, NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID, BUYIN_PRICE, SALEOUT_PRICE, QTY_ALERT, STATUS) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Active') RETURNING ID`,
+      [newProductId, NAME_EN, NAME_KH, BARCODE || null, BRAND || null, CATEGORY_ID || null, BUYIN_PRICE || 0, SALEOUT_PRICE || 0, QTY_ALERT || 10]
+    );
 
-    console.log("📝 SQL:", sql);
+    const productId = result.rows[0].id;
 
-    dbModule.run(sql, [], function (err) {
-      if (err) {
-        console.error("❌ Create product error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
+    await db.query(
+      `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable) VALUES ($1, $2, $3)`,
+      [productId, QTY_INSTOCK || 0, QTY_INSTOCK || 0]
+    );
 
-      const productId = this.lastID;
-
-      dbModule.run(
-        `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable) VALUES (${productId}, ${QTY_INSTOCK || 0}, ${QTY_INSTOCK || 0})`,
-        [],
-        function (err) {
-          if (err) {
-            console.error("❌ Create stock error:", err.message);
-            return res.status(500).json({ error: err.message });
-          }
-
-          logActivity(req.body.user_id || 1, "Created product", "TBL_PRODUCTS", newProductId);
-          res.json({
-            product_id: newProductId,
-            message: "Product created successfully",
-          });
-        }
-      );
+    logActivity(req.body.user_id || 1, "Created product", "TBL_PRODUCTS", newProductId);
+    res.json({
+      product_id: newProductId,
+      message: "Product created successfully",
     });
-  });
+  } catch (err) {
+    console.error("❌ Create product error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put("/api/products/:id", (req, res) => {
+app.put("/api/products/:id", async (req, res) => {
   const { id } = req.params;
   const {
     NAME_EN,
@@ -456,134 +403,129 @@ app.put("/api/products/:id", (req, res) => {
     STATUS,
   } = req.body;
 
-  const safeNameEn = (NAME_EN || "").replace(/'/g, "''");
-  const safeNameKh = (NAME_KH || "").replace(/'/g, "''");
-  const safeBarcode = (BARCODE || "").replace(/'/g, "''");
-  const safeBrand = (BRAND || "").replace(/'/g, "''");
-  const safeStatus = (STATUS || "Active").replace(/'/g, "''");
+  try {
+    const result = await db.query(
+      `UPDATE TBL_PRODUCTS 
+       SET NAME_EN = $1, NAME_KH = $2, BARCODE = $3, BRAND = $4, 
+           CATEGORY_ID = $5, BUYIN_PRICE = $6, SALEOUT_PRICE = $7, 
+           QTY_ALERT = $8, STATUS = $9 
+       WHERE PRODUCT_ID = $10`,
+      [NAME_EN, NAME_KH, BARCODE, BRAND, CATEGORY_ID || null, BUYIN_PRICE || 0, SALEOUT_PRICE || 0, QTY_ALERT || 10, STATUS || 'Active', id]
+    );
 
-  const sql = `
-    UPDATE TBL_PRODUCTS 
-    SET NAME_EN = '${safeNameEn}', 
-        NAME_KH = '${safeNameKh}', 
-        BARCODE = '${safeBarcode}', 
-        BRAND = '${safeBrand}', 
-        CATEGORY_ID = ${CATEGORY_ID || "NULL"}, 
-        BUYIN_PRICE = ${BUYIN_PRICE || 0}, 
-        SALEOUT_PRICE = ${SALEOUT_PRICE || 0}, 
-        QTY_ALERT = ${QTY_ALERT || 10}, 
-        STATUS = '${safeStatus}' 
-    WHERE PRODUCT_ID = '${id}'
-  `;
-
-  dbModule.run(sql, [], function (err) {
-    if (err) {
-      console.error("❌ Update product error:", err.message);
-      return res.status(500).json({ error: err.message });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Product not found" });
     }
-    if (this.changes === 0) return res.status(404).json({ error: "Product not found" });
 
     logActivity(req.body.user_id || 1, "Updated product", "TBL_PRODUCTS", id);
     res.json({ message: "Product updated successfully" });
-  });
+  } catch (err) {
+    console.error("❌ Update product error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete("/api/products/:id", (req, res) => {
+app.delete("/api/products/:id", async (req, res) => {
   const { id } = req.params;
-  dbModule.run(`UPDATE TBL_PRODUCTS SET STATUS = 'Inactive' WHERE PRODUCT_ID = '${id}'`, [], function (err) {
-    if (err) {
-      console.error("❌ Delete product error:", err.message);
-      return res.status(500).json({ error: err.message });
+  try {
+    const result = await db.query(
+      `UPDATE TBL_PRODUCTS SET STATUS = 'Inactive' WHERE PRODUCT_ID = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Product not found" });
     }
-    if (this.changes === 0) return res.status(404).json({ error: "Product not found" });
 
     logActivity(req.body.user_id || 1, "Deleted product", "TBL_PRODUCTS", id);
     res.json({ message: "Product deleted successfully" });
-  });
+  } catch (err) {
+    console.error("❌ Delete product error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // ORDERS
 // ============================================
-
-app.get("/api/orders", (req, res) => {
+app.get("/api/orders", async (req, res) => {
   const { limit = 50, status } = req.query;
   let sql = "SELECT * FROM TBL_ORDERS";
+  const params = [];
 
   if (status) {
-    const safeStatus = status.replace(/'/g, "''");
-    sql += ` WHERE STATUS = '${safeStatus}'`;
+    sql += ` WHERE STATUS = $1`;
+    params.push(status);
   }
 
   sql += " ORDER BY ORDER_DATE DESC";
 
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Orders error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    const limitedRows = rows.slice(0, Number(limit));
+  try {
+    const result = await db.query(sql, params);
+    const limitedRows = result.rows.slice(0, Number(limit));
     console.log(`📋 Orders found: ${limitedRows.length}`);
     res.json(limitedRows);
-  });
+  } catch (err) {
+    console.error("❌ Orders error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get("/api/orders/pending", (req, res) => {
+app.get("/api/orders/pending", async (req, res) => {
   console.log("📋 Fetching pending orders...");
 
-  const sql = `
-    SELECT OR_ID, ORDER_NO, ORDER_DATE, AMOUNT_US, STATUS, PaymentMethod, NOTES, EMP_PREPARE, CUSTOMER_ID
-    FROM TBL_ORDERS
-    WHERE STATUS IN ('Pending', 'Processing')
-    ORDER BY ORDER_DATE DESC
-  `;
+  try {
+    const result = await db.query(
+      `SELECT OR_ID, ORDER_NO, ORDER_DATE, AMOUNT_US, STATUS, PaymentMethod, NOTES, EMP_PREPARE, CUSTOMER_ID
+       FROM TBL_ORDERS
+       WHERE STATUS IN ('Pending', 'Processing')
+       ORDER BY ORDER_DATE DESC`
+    );
 
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Pending orders error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`📋 Pending orders found: ${rows.length}`);
-    res.json(rows || []);
-  });
+    console.log(`📋 Pending orders found: ${result.rows.length}`);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error("❌ Pending orders error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get("/api/orders/recent", (req, res) => {
-  dbModule.all("SELECT * FROM TBL_ORDERS ORDER BY ORDER_DATE DESC", [], (err, rows) => {
-    if (err) {
-      console.error("❌ Recent orders error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    const recent = rows.slice(0, 10);
-    res.json(recent);
-  });
+app.get("/api/orders/recent", async (req, res) => {
+  try {
+    const result = await db.query(
+      "SELECT * FROM TBL_ORDERS ORDER BY ORDER_DATE DESC LIMIT 10"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Recent orders error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get("/api/stock/low-stock", (req, res) => {
+app.get("/api/stock/low-stock", async (req, res) => {
   console.log("📊 Fetching low stock products...");
 
-  const sql = `
-    SELECT p.PRODUCT_ID, p.NAME_EN, p.NAME_KH, s.QtyAvailable, p.QTY_ALERT, p.SALEOUT_PRICE
-    FROM Tbl_Stock s
-    LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID
-    WHERE s.QtyAvailable <= p.QTY_ALERT AND p.STATUS = 'Active'
-    ORDER BY s.QtyAvailable ASC
-  `;
+  try {
+    const result = await db.query(
+      `SELECT p.PRODUCT_ID, p.NAME_EN, p.NAME_KH, s.QtyAvailable, p.QTY_ALERT, p.SALEOUT_PRICE
+       FROM Tbl_Stock s
+       LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID
+       WHERE s.QtyAvailable <= p.QTY_ALERT AND p.STATUS = 'Active'
+       ORDER BY s.QtyAvailable ASC`
+    );
 
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Low stock error:", err.message);
-      return res.status(500).json([]);
-    }
-    console.log(`📊 Low stock products found: ${rows.length}`);
-    res.json(rows || []);
-  });
+    console.log(`📊 Low stock products found: ${result.rows.length}`);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error("❌ Low stock error:", err.message);
+    res.status(500).json([]);
+  }
 });
 
 // ============================================
 // ORDER DETAILS
 // ============================================
-app.get("/api/orders/:id", (req, res) => {
+app.get("/api/orders/:id", async (req, res) => {
   const { id } = req.params;
   console.log(`📊 Fetching order details for ID: ${id}`);
 
@@ -593,115 +535,122 @@ app.get("/api/orders/:id", (req, res) => {
     return res.status(400).json({ error: "Invalid order ID format" });
   }
 
-  const orderSql = `
-    SELECT OR_ID, ORDER_NO, ORDER_DATE, AMOUNT_US, STATUS, PaymentMethod, NOTES, EMP_PREPARE, CUSTOMER_ID
-    FROM TBL_ORDERS
-    WHERE OR_ID = ${numericId}
-  `;
+  try {
+    const orderResult = await db.query(
+      `SELECT OR_ID, ORDER_NO, ORDER_DATE, AMOUNT_US, STATUS, PaymentMethod, NOTES, EMP_PREPARE, CUSTOMER_ID
+       FROM TBL_ORDERS WHERE OR_ID = $1`,
+      [numericId]
+    );
 
-  dbModule.get(orderSql, [], (err, order) => {
-    if (err) {
-      console.error("❌ Order error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-
-    if (!order) {
+    if (orderResult.rows.length === 0) {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    const customerSql = `
-      SELECT CUS_ID, FIRST_NAME, LAST_NAME, PHONE, E_MAIL
-      FROM TBL_CUSTOMERS
-      WHERE CUS_ID = 'CUS${String(order.CUSTOMER_ID).padStart(3, "0")}' OR CUS_ID = '${order.CUSTOMER_ID}'
-    `;
+    const order = orderResult.rows[0];
+    const customerId = order.CUSTOMER_ID;
 
-    dbModule.get(customerSql, [], (err2, customer) => {
-      if (err2) {
-        console.warn("⚠️ Customer error:", err2.message);
-        customer = null;
+    // Get customer
+    let customer = null;
+    try {
+      const customerResult = await db.query(
+        `SELECT CUS_ID, FIRST_NAME, LAST_NAME, PHONE, E_MAIL
+         FROM TBL_CUSTOMERS
+         WHERE CUS_ID = $1 OR CUS_ID = $2`,
+        [`CUS${String(customerId).padStart(3, "0")}`, customerId]
+      );
+      if (customerResult.rows.length > 0) {
+        customer = customerResult.rows[0];
       }
+    } catch (err) {
+      console.warn("⚠️ Customer error:", err.message);
+    }
 
-      const paymentSql = `SELECT * FROM TBL_PAYMENT WHERE OR_ID = ${numericId}`;
-      dbModule.all(paymentSql, [], (err3, payments) => {
-        if (err3) {
-          console.warn("⚠️ Payments error:", err3.message);
-          payments = [];
-        }
+    // Get payments
+    let payments = [];
+    try {
+      const paymentResult = await db.query(
+        `SELECT * FROM TBL_PAYMENT WHERE OR_ID = $1`,
+        [numericId]
+      );
+      payments = paymentResult.rows;
+    } catch (err) {
+      console.warn("⚠️ Payments error:", err.message);
+    }
 
-        const itemsSql = `
-          SELECT ID, OR_ID, PRODUCT_ID, QTY_ORDER as qty, QTY_BONUS, PRICE as unit_price, DISCOUNT, SUBTOTAL as subtotal
-          FROM TBL_ORDERS_DETAILS
-          WHERE OR_ID = ${numericId}
-        `;
+    // Get items
+    let items = [];
+    try {
+      const itemsResult = await db.query(
+        `SELECT ID, OR_ID, PRODUCT_ID, QTY_ORDER as qty, QTY_BONUS, PRICE as unit_price, DISCOUNT, SUBTOTAL as subtotal
+         FROM TBL_ORDERS_DETAILS WHERE OR_ID = $1`,
+        [numericId]
+      );
+      items = itemsResult.rows;
+    } catch (err) {
+      console.warn("⚠️ Items error:", err.message);
+    }
 
-        dbModule.all(itemsSql, [], (err4, items) => {
-          if (err4) {
-            console.warn("⚠️ Items error:", err4.message);
-            items = [];
-          }
-
-          res.json({
-            OR_ID: order.OR_ID,
-            ORDER_NO: order.ORDER_NO,
-            ORDER_DATE: order.ORDER_DATE,
-            AMOUNT_US: order.AMOUNT_US,
-            STATUS: order.STATUS,
-            PaymentMethod: order.PaymentMethod,
-            NOTES: order.NOTES,
-            EMP_PREPARE: order.EMP_PREPARE,
-            CUSTOMER_ID: order.CUSTOMER_ID,
-            customer: customer || {
-              CUS_ID: order.CUSTOMER_ID,
-              FIRST_NAME: "Unknown",
-              LAST_NAME: "Customer",
-              PHONE: null,
-              E_MAIL: null,
-            },
-            payments: payments || [],
-            items: items || [],
-          });
-        });
-      });
+    res.json({
+      OR_ID: order.OR_ID,
+      ORDER_NO: order.ORDER_NO,
+      ORDER_DATE: order.ORDER_DATE,
+      AMOUNT_US: order.AMOUNT_US,
+      STATUS: order.STATUS,
+      PaymentMethod: order.PaymentMethod,
+      NOTES: order.NOTES,
+      EMP_PREPARE: order.EMP_PREPARE,
+      CUSTOMER_ID: order.CUSTOMER_ID,
+      customer: customer || {
+        CUS_ID: order.CUSTOMER_ID,
+        FIRST_NAME: "Unknown",
+        LAST_NAME: "Customer",
+        PHONE: null,
+        E_MAIL: null,
+      },
+      payments: payments || [],
+      items: items || [],
     });
-  });
+  } catch (err) {
+    console.error("❌ Order error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // PAYMENT METHODS
 // ============================================
-app.get("/api/payment-methods", (req, res) => {
+app.get("/api/payment-methods", async (req, res) => {
   console.log("💳 Fetching payment methods...");
 
-  dbModule.all('SELECT * FROM TBL_PAYMENT_METHOD WHERE STATUS = "ACTIVE"', [], (err, rows) => {
-    if (err) {
-      console.error("❌ Payment methods error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`💳 Payment methods found: ${rows.length}`);
-    res.json(rows);
-  });
+  try {
+    const result = await db.query(`SELECT * FROM TBL_PAYMENT_METHOD WHERE STATUS = 'ACTIVE'`);
+    console.log(`💳 Payment methods found: ${result.rows.length}`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Payment methods error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // STOCK MANAGEMENT
 // ============================================
-
-app.get("/api/stock", (req, res) => {
-  dbModule.all(`
-    SELECT s.*, p.PRODUCT_ID as PRODUCT_CODE, p.NAME_EN, p.NAME_KH, p.QTY_ALERT, p.SALEOUT_PRICE
-    FROM Tbl_Stock s
-    LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID
-  `, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Stock error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`📊 Stock records found: ${rows.length}`);
-    res.json(rows);
-  });
+app.get("/api/stock", async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT s.*, p.PRODUCT_ID as PRODUCT_CODE, p.NAME_EN, p.NAME_KH, p.QTY_ALERT, p.SALEOUT_PRICE
+      FROM Tbl_Stock s
+      LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID
+    `);
+    console.log(`📊 Stock records found: ${result.rows.length}`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Stock error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get("/api/stock/product/:id", (req, res) => {
+app.get("/api/stock/product/:id", async (req, res) => {
   const { id } = req.params;
   console.log(`📊 Checking stock for product ID: ${id}`);
 
@@ -709,126 +658,142 @@ app.get("/api/stock/product/:id", (req, res) => {
     return res.json({ ProductID: id, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: "Unknown" });
   }
 
-  const productIdText = String(id);
-  const findProductSql = `SELECT ID, PRODUCT_ID, NAME_EN FROM TBL_PRODUCTS WHERE PRODUCT_ID = '${productIdText}'`;
+  try {
+    const productResult = await db.query(
+      `SELECT ID, PRODUCT_ID, NAME_EN FROM TBL_PRODUCTS WHERE PRODUCT_ID = $1`,
+      [id]
+    );
 
-  dbModule.get(findProductSql, [], (err, product) => {
-    if (err || !product) {
-      console.warn(`⚠️ Product ${productIdText} not found in TBL_PRODUCTS`);
-      return res.json({ ProductID: productIdText, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: "Unknown" });
+    if (productResult.rows.length === 0) {
+      return res.json({ ProductID: id, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: "Unknown" });
     }
 
+    const product = productResult.rows[0];
     const numericProductId = product.ID;
-    console.log(`🔍 Found product with numeric ID: ${numericProductId}, Name: ${product.NAME_EN}`);
 
-    const checkSql = `SELECT * FROM Tbl_Stock WHERE ProductID = ${numericProductId}`;
+    const stockResult = await db.query(
+      `SELECT * FROM Tbl_Stock WHERE ProductID = $1`,
+      [numericProductId]
+    );
 
-    dbModule.get(checkSql, [], (err2, stock) => {
-      if (err2) {
-        console.error("❌ Stock check error:", err2.message);
-        return res.json({ ProductID: productIdText, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: product.NAME_EN || "Unknown" });
-      }
+    if (stockResult.rows.length === 0) {
+      await db.query(
+        `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) VALUES ($1, 0, 0, 0)`,
+        [numericProductId]
+      );
+      return res.json({ ProductID: id, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: product.NAME_EN || "Unknown" });
+    }
 
-      if (!stock) {
-        const createSql = `INSERT INTO Tbl_Stock (ProductID, QtyInStock, QtyAvailable, QtyReserved) VALUES (${numericProductId}, 0, 0, 0)`;
-        dbModule.run(createSql, [], function () {
-          return res.json({ ProductID: productIdText, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: product.NAME_EN || "Unknown" });
-        });
-        return;
-      }
-
-      res.json({
-        ProductID: productIdText,
-        StockID: stock.StockID,
-        QtyInStock: stock.QtyInStock || 0,
-        QtyReserved: stock.QtyReserved || 0,
-        QtyAvailable: stock.QtyAvailable || 0,
-        LastUpdated: stock.LastUpdated || null,
-        PRODUCT_NAME: product.NAME_EN || "Unknown",
-      });
+    const stock = stockResult.rows[0];
+    res.json({
+      ProductID: id,
+      StockID: stock.StockID,
+      QtyInStock: stock.QtyInStock || 0,
+      QtyReserved: stock.QtyReserved || 0,
+      QtyAvailable: stock.QtyAvailable || 0,
+      LastUpdated: stock.LastUpdated || null,
+      PRODUCT_NAME: product.NAME_EN || "Unknown",
     });
-  });
+  } catch (err) {
+    console.error("❌ Stock check error:", err.message);
+    res.json({ ProductID: id, QtyInStock: 0, QtyReserved: 0, QtyAvailable: 0, PRODUCT_NAME: "Unknown" });
+  }
 });
 
 // ============================================
-// SUPPLIERS
+// SUPPLIERS - FIXED with better fallback
 // ============================================
-
-app.get("/api/suppliers", (req, res) => {
+app.get("/api/suppliers", async (req, res) => {
   const { search } = req.query;
   console.log("🔍 GET /api/suppliers - search:", search);
 
   let sql = "SELECT * FROM TBL_SUPPLIERS WHERE STATUS = 'Active'";
+  const params = [];
 
   if (search) {
-    const safeSearch = search.replace(/'/g, "''");
-    sql += ` AND (COMPANY LIKE '%${safeSearch}%' OR FIRST_NAME LIKE '%${safeSearch}%' OR LAST_NAME LIKE '%${safeSearch}%' OR PHONE LIKE '%${safeSearch}%' OR E_MAIL LIKE '%${safeSearch}%')`;
+    sql += ` AND (COMPANY ILIKE $1 OR FIRST_NAME ILIKE $1 OR LAST_NAME ILIKE $1 OR PHONE ILIKE $1 OR E_MAIL ILIKE $1)`;
+    params.push(`%${search}%`);
   }
 
   sql += " ORDER BY COMPANY";
 
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Suppliers error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-
-    const mappedRows = rows.map(row => ({
-      SUP_ID: row.SUP_ID,
-      SUP_NAME: row.COMPANY,
-      CONTACT_PERSON: `${row.FIRST_NAME || ''} ${row.LAST_NAME || ''}`.trim() || row.FIRST_NAME || row.LAST_NAME || '',
-      PHONE: row.PHONE,
-      EMAIL: row.E_MAIL,
-      ADDRESS: row.ADDRESS,
-      STATUS: row.STATUS,
-      WEBSITE: row.WEBSITE,
-      PAYMENT_TI: row.PAYMENT_TI
+  try {
+    const result = await db.query(sql, params);
+    
+    // ✅ FIXED: Better mapping with fallbacks
+    const mappedRows = result.rows.map(row => ({
+      SUP_ID: row.SUP_ID || `SUP${String(Math.random()).slice(2, 6)}`,
+      // ✅ If COMPANY is empty, use FIRST_NAME + LAST_NAME or default
+      SUP_NAME: row.COMPANY || 
+                (row.FIRST_NAME && row.LAST_NAME ? `${row.FIRST_NAME} ${row.LAST_NAME}`.trim() : '') ||
+                row.FIRST_NAME || 
+                row.LAST_NAME || 
+                'Unknown Supplier',
+      CONTACT_PERSON: `${row.FIRST_NAME || ''} ${row.LAST_NAME || ''}`.trim() || row.FIRST_NAME || row.LAST_NAME || 'No contact',
+      PHONE: row.PHONE || '',
+      EMAIL: row.E_MAIL || '',
+      ADDRESS: row.ADDRESS || '',
+      STATUS: row.STATUS || 'Active',
+      WEBSITE: row.WEBSITE || '',
+      PAYMENT_TI: row.PAYMENT_TI || ''
     }));
 
     console.log(`🚚 Suppliers found: ${mappedRows.length}`);
+    console.log('📦 First supplier:', mappedRows[0]); // Debug log
     res.json(mappedRows);
-  });
+  } catch (err) {
+    console.error("❌ Suppliers error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get("/api/suppliers/:id", (req, res) => {
+app.get("/api/suppliers/:id", async (req, res) => {
   const { id } = req.params;
   console.log(`🔍 GET /api/suppliers/${id}`);
 
-  dbModule.get(`SELECT * FROM TBL_SUPPLIERS WHERE SUP_ID = '${id}'`, [], (err, row) => {
-    if (err) {
-      console.error("❌ Supplier error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    if (!row) {
+  try {
+    const result = await db.query(`SELECT * FROM TBL_SUPPLIERS WHERE SUP_ID = $1`, [id]);
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: "Supplier not found" });
     }
 
+    const row = result.rows[0];
     const mappedRow = {
       SUP_ID: row.SUP_ID,
-      SUP_NAME: row.COMPANY,
-      CONTACT_PERSON: `${row.FIRST_NAME || ''} ${row.LAST_NAME || ''}`.trim() || row.FIRST_NAME || row.LAST_NAME || '',
-      PHONE: row.PHONE,
-      EMAIL: row.E_MAIL,
-      ADDRESS: row.ADDRESS,
-      STATUS: row.STATUS,
-      WEBSITE: row.WEBSITE,
-      PAYMENT_TI: row.PAYMENT_TI
+      SUP_NAME: row.COMPANY || 
+                (row.FIRST_NAME && row.LAST_NAME ? `${row.FIRST_NAME} ${row.LAST_NAME}`.trim() : '') ||
+                row.FIRST_NAME || 
+                row.LAST_NAME || 
+                'Unknown Supplier',
+      CONTACT_PERSON: `${row.FIRST_NAME || ''} ${row.LAST_NAME || ''}`.trim() || row.FIRST_NAME || row.LAST_NAME || 'No contact',
+      PHONE: row.PHONE || '',
+      EMAIL: row.E_MAIL || '',
+      ADDRESS: row.ADDRESS || '',
+      STATUS: row.STATUS || 'Active',
+      WEBSITE: row.WEBSITE || '',
+      PAYMENT_TI: row.PAYMENT_TI || ''
     };
 
     res.json(mappedRow);
-  });
+  } catch (err) {
+    console.error("❌ Supplier error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post("/api/suppliers", (req, res) => {
+app.post("/api/suppliers", async (req, res) => {
   console.log("📝 POST /api/suppliers - Request body:", JSON.stringify(req.body, null, 2));
 
+  // ✅ Support both frontend and backend field names
   const supName = req.body.SUP_NAME || req.body.COMPANY || req.body.company || req.body.name || req.body.supplierName;
   const contactPerson = req.body.CONTACT_PERSON || req.body.contactPerson || req.body.contact_person || req.body.contact || '';
   const phone = req.body.PHONE || req.body.phone || '';
   const email = req.body.EMAIL || req.body.E_MAIL || req.body.email || '';
   const address = req.body.ADDRESS || req.body.address || '';
+  const website = req.body.WEBSITE || req.body.website || '';
+  const taxId = req.body.TAX_ID || req.body.tax_id || '';
 
-  console.log("📝 Extracted values:", { supName, contactPerson, phone, email, address });
+  console.log("📝 Extracted values:", { supName, contactPerson, phone, email, address, website, taxId });
 
   if (!supName) {
     console.error("❌ Missing supplier name");
@@ -854,361 +819,323 @@ app.post("/api/suppliers", (req, res) => {
     }
   }
 
-  const safeCompany = (supName || "").replace(/'/g, "''");
-  const safeFirstName = (firstName || "").replace(/'/g, "''");
-  const safeLastName = (lastName || "").replace(/'/g, "''");
-  const safePhone = (phone || "").replace(/'/g, "''");
-  const safeEmail = (email || "").replace(/'/g, "''");
-  const safeAddress = (address || "").replace(/'/g, "''");
-
-  const getNextIdSql = `SELECT MAX(SUP_ID) as maxId FROM TBL_SUPPLIERS`;
-
-  dbModule.get(getNextIdSql, [], (err, result) => {
-    if (err) {
-      console.error("❌ Get next ID error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-
+  try {
+    // Get next ID
+    const maxIdResult = await db.query("SELECT MAX(SUP_ID) as maxId FROM TBL_SUPPLIERS");
     let nextNumber = 1;
-    if (result && result.maxId) {
-      const currentId = result.maxId;
-      const numPart = parseInt(currentId.replace(/[^0-9]/g, ""));
-      if (!isNaN(numPart)) {
-        nextNumber = numPart + 1;
-      }
+    if (maxIdResult.rows[0]?.maxId) {
+      const numPart = parseInt(maxIdResult.rows[0].maxId.replace(/[^0-9]/g, ""));
+      if (!isNaN(numPart)) nextNumber = numPart + 1;
     }
     const newSupId = `SUP${String(nextNumber).padStart(3, "0")}`;
-    console.log(`🔑 Generated SUP_ID: ${newSupId}`);
 
-    const sql = `
-      INSERT INTO TBL_SUPPLIERS (
-        SUP_ID, COMPANY, FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, STATUS
-      ) VALUES (
-        '${newSupId}', '${safeCompany}', '${safeFirstName}', '${safeLastName}',
-        '${safePhone}', '${safeEmail}', '${safeAddress}', 'Active'
-      )
-    `;
+    const result = await db.query(
+      `INSERT INTO TBL_SUPPLIERS (SUP_ID, COMPANY, FIRST_NAME, LAST_NAME, PHONE, E_MAIL, ADDRESS, STATUS, WEBSITE) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active', $8) RETURNING SUP_ID`,
+      [newSupId, supName, firstName || null, lastName || null, phone || null, email || null, address || null, website || null]
+    );
 
-    console.log("📝 SQL:", sql);
+    logActivity(req.body.user_id || 1, "Created supplier", "TBL_SUPPLIERS", newSupId);
 
-    dbModule.run(sql, [], function (err) {
-      if (err) {
-        console.error("❌ Create supplier error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-
-      logActivity(req.body.user_id || 1, "Created supplier", "TBL_SUPPLIERS", newSupId);
-
-      res.json({
-        SUP_ID: newSupId,
-        SUP_NAME: safeCompany,
-        CONTACT_PERSON: contactPerson,
-        PHONE: safePhone,
-        EMAIL: safeEmail,
-        ADDRESS: safeAddress,
-        STATUS: 'Active',
-        message: "Supplier created successfully",
-      });
+    res.json({
+      SUP_ID: newSupId,
+      SUP_NAME: supName,
+      CONTACT_PERSON: contactPerson,
+      PHONE: phone,
+      EMAIL: email,
+      ADDRESS: address,
+      STATUS: 'Active',
+      WEBSITE: website,
+      message: "Supplier created successfully",
     });
-  });
+  } catch (err) {
+    console.error("❌ Create supplier error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put("/api/suppliers/:id", (req, res) => {
+app.put("/api/suppliers/:id", async (req, res) => {
   const { id } = req.params;
-  console.log(`📝 PUT /api/suppliers/${id} - Request body:`, JSON.stringify(req.body, null, 2));
+  console.log(`📝 PUT /api/suppliers/${id}`);
+  console.log('📦 Request body:', req.body);
 
+  // ✅ Support both frontend and backend field names
   const supName = req.body.SUP_NAME || req.body.COMPANY || req.body.company || req.body.name;
   const contactPerson = req.body.CONTACT_PERSON || req.body.contactPerson || req.body.contact_person || '';
   const phone = req.body.PHONE || req.body.phone || '';
   const email = req.body.EMAIL || req.body.E_MAIL || req.body.email || '';
   const address = req.body.ADDRESS || req.body.address || '';
   const status = req.body.STATUS || req.body.status || 'Active';
+  const website = req.body.WEBSITE || req.body.website || '';
 
   if (!supName) {
-    console.error("❌ Missing supplier name");
-    return res.status(400).json({ error: "Supplier name is required", received: req.body });
+    return res.status(400).json({ error: "Supplier name is required" });
   }
 
   let firstName = '';
   let lastName = '';
   if (contactPerson) {
-    const isPhoneNumber = /^[0-9\s\-+()]+$/.test(contactPerson);
-    if (isPhoneNumber) {
-      firstName = contactPerson;
-      lastName = '';
+    const parts = contactPerson.trim().split(' ');
+    if (parts.length > 1) {
+      firstName = parts[0];
+      lastName = parts.slice(1).join(' ');
     } else {
-      const parts = contactPerson.trim().split(' ');
-      if (parts.length > 1) {
-        firstName = parts[0];
-        lastName = parts.slice(1).join(' ');
-      } else {
-        firstName = parts[0];
-        lastName = '';
-      }
+      firstName = parts[0];
+      lastName = '';
     }
   }
 
-  const safeCompany = (supName || "").replace(/'/g, "''");
-  const safeFirstName = (firstName || "").replace(/'/g, "''");
-  const safeLastName = (lastName || "").replace(/'/g, "''");
-  const safePhone = (phone || "").replace(/'/g, "''");
-  const safeEmail = (email || "").replace(/'/g, "''");
-  const safeAddress = (address || "").replace(/'/g, "''");
-  const safeStatus = (status || "Active").replace(/'/g, "''");
+  try {
+    const result = await db.query(
+      `UPDATE TBL_SUPPLIERS 
+       SET COMPANY = $1, FIRST_NAME = $2, LAST_NAME = $3, PHONE = $4, E_MAIL = $5, ADDRESS = $6, STATUS = $7, WEBSITE = $8
+       WHERE SUP_ID = $9`,
+      [supName, firstName || null, lastName || null, phone || null, email || null, address || null, status || 'Active', website || null, id]
+    );
 
-  const sql = `
-    UPDATE TBL_SUPPLIERS 
-    SET COMPANY = '${safeCompany}',
-        FIRST_NAME = '${safeFirstName}',
-        LAST_NAME = '${safeLastName}',
-        PHONE = '${safePhone}',
-        E_MAIL = '${safeEmail}',
-        ADDRESS = '${safeAddress}',
-        STATUS = '${safeStatus}'
-    WHERE SUP_ID = '${id}'
-  `;
-
-  console.log("📝 SQL:", sql);
-
-  dbModule.run(sql, [], function (err) {
-    if (err) {
-      console.error("❌ Update supplier error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: "Supplier not found" });
     }
 
     logActivity(req.body.user_id || 1, "Updated supplier", "TBL_SUPPLIERS", id);
-
-    res.json({
+    res.json({ 
       message: "Supplier updated successfully",
       SUP_ID: id,
-      SUP_NAME: safeCompany,
+      SUP_NAME: supName,
       CONTACT_PERSON: contactPerson,
-      PHONE: safePhone,
-      EMAIL: safeEmail,
-      ADDRESS: safeAddress,
-      STATUS: safeStatus
+      PHONE: phone,
+      EMAIL: email,
+      ADDRESS: address,
+      STATUS: status,
+      WEBSITE: website
     });
-  });
+  } catch (err) {
+    console.error("❌ Update supplier error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete("/api/suppliers/:id", (req, res) => {
+app.delete("/api/suppliers/:id", async (req, res) => {
   const { id } = req.params;
   console.log(`🗑️ DELETE /api/suppliers/${id}`);
 
-  dbModule.run(`UPDATE TBL_SUPPLIERS SET STATUS = 'Inactive' WHERE SUP_ID = '${id}'`, [], function (err) {
-    if (err) {
-      console.error("❌ Delete supplier error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await db.query(
+      `UPDATE TBL_SUPPLIERS SET STATUS = 'Inactive' WHERE SUP_ID = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: "Supplier not found" });
     }
 
     logActivity(req.body.user_id || 1, "Deleted supplier", "TBL_SUPPLIERS", id);
     res.json({ message: "Supplier deleted successfully" });
-  });
+  } catch (err) {
+    console.error("❌ Delete supplier error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
-
 // ============================================
-// REPORTS API - FIXED WITH ALL ENDPOINTS
+// REPORTS API
 // ============================================
-
-// Customers Report
-app.get("/api/reports/customers", (req, res) => {
+app.get("/api/reports/customers", async (req, res) => {
   console.log("📊 Generating Customer Report...");
-  dbModule.all("SELECT * FROM TBL_CUSTOMERS WHERE STATUS = 'Active' ORDER BY FIRST_NAME, LAST_NAME", [], (err, rows) => {
-    if (err) {
-      console.error("❌ Customer report error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`📊 Customer report: ${rows.length} records`);
-    res.json(rows || []);
-  });
+  try {
+    const result = await db.query(
+      "SELECT * FROM TBL_CUSTOMERS WHERE STATUS = 'Active' ORDER BY FIRST_NAME, LAST_NAME"
+    );
+    console.log(`📊 Customer report: ${result.rows.length} records`);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error("❌ Customer report error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Products Report
-app.get("/api/reports/products", (req, res) => {
+app.get("/api/reports/products", async (req, res) => {
   console.log("📊 Generating Product Report...");
-  const sql = `
-    SELECT ID, PRODUCT_ID, NAME_EN, NAME_KH, SALEOUT_PRICE as PRICE, STATUS
-    FROM TBL_PRODUCTS WHERE STATUS = 'Active' ORDER BY NAME_EN
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Product report error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`📊 Product report: ${rows.length} records`);
-    res.json(rows || []);
-  });
+  try {
+    const result = await db.query(
+      `SELECT ID, PRODUCT_ID, NAME_EN, NAME_KH, SALEOUT_PRICE as PRICE, STATUS
+       FROM TBL_PRODUCTS WHERE STATUS = 'Active' ORDER BY NAME_EN`
+    );
+    console.log(`📊 Product report: ${result.rows.length} records`);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error("❌ Product report error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Orders Report
-app.get("/api/reports/orders", (req, res) => {
+app.get("/api/reports/orders", async (req, res) => {
   console.log("📊 Generating Order Report...");
-  const sql = `SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as TOTAL_AMOUNT, STATUS FROM TBL_ORDERS ORDER BY ORDER_DATE DESC`;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Order report error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`📊 Order report: ${rows.length} records`);
-    res.json(rows || []);
-  });
+  try {
+    const result = await db.query(
+      `SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as TOTAL_AMOUNT, STATUS FROM TBL_ORDERS ORDER BY ORDER_DATE DESC`
+    );
+    console.log(`📊 Order report: ${result.rows.length} records`);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error("❌ Order report error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Stock Report
-app.get("/api/reports/stock", (req, res) => {
+app.get("/api/reports/stock", async (req, res) => {
   console.log("📊 Generating Stock Report...");
-  const sql = `
-    SELECT s.StockID, s.ProductID, p.PRODUCT_ID as PRODUCT_CODE, p.NAME_EN as PRODUCT_NAME,
-           s.QtyInStock as IN_STOCK, s.QtyAvailable as AVAILABLE, s.QtyReserved as RESERVED, s.LastUpdated
-    FROM Tbl_Stock s LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID ORDER BY p.NAME_EN
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Stock report error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`📊 Stock report: ${rows.length} records`);
-    res.json(rows || []);
-  });
+  try {
+    const result = await db.query(`
+      SELECT s.StockID, s.ProductID, p.PRODUCT_ID as PRODUCT_CODE, p.NAME_EN as PRODUCT_NAME,
+             s.QtyInStock as IN_STOCK, s.QtyAvailable as AVAILABLE, s.QtyReserved as RESERVED, s.LastUpdated
+      FROM Tbl_Stock s LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID ORDER BY p.NAME_EN
+    `);
+    console.log(`📊 Stock report: ${result.rows.length} records`);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error("❌ Stock report error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// SALES REPORT - NEW
-app.get("/api/reports/sales", (req, res) => {
+app.get("/api/reports/sales", async (req, res) => {
   console.log("📊 Generating Sales Report...");
-  const sql = `
-    SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as amount, STATUS
-    FROM TBL_ORDERS
-    ORDER BY ORDER_DATE DESC
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Sales report error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`📊 Sales report: ${rows.length} records`);
-    res.json(rows || []);
-  });
+  try {
+    const result = await db.query(
+      `SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as amount, STATUS
+       FROM TBL_ORDERS ORDER BY ORDER_DATE DESC`
+    );
+    console.log(`📊 Sales report: ${result.rows.length} records`);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error("❌ Sales report error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// INVENTORY REPORT - NEW
-app.get("/api/reports/inventory", (req, res) => {
+app.get("/api/reports/inventory", async (req, res) => {
   console.log("📊 Generating Inventory Report...");
-  const sql = `
-    SELECT p.PRODUCT_ID, p.NAME_EN as product_name, s.QtyInStock, s.QtyAvailable, s.QtyReserved, p.SALEOUT_PRICE as price
-    FROM Tbl_Stock s LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID ORDER BY p.NAME_EN
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Inventory report error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`📊 Inventory report: ${rows.length} records`);
-    res.json(rows || []);
-  });
+  try {
+    const result = await db.query(`
+      SELECT p.PRODUCT_ID, p.NAME_EN as product_name, s.QtyInStock, s.QtyAvailable, s.QtyReserved, p.SALEOUT_PRICE as price
+      FROM Tbl_Stock s LEFT JOIN TBL_PRODUCTS p ON s.ProductID = p.ID ORDER BY p.NAME_EN
+    `);
+    console.log(`📊 Inventory report: ${result.rows.length} records`);
+    res.json(result.rows || []);
+  } catch (err) {
+    console.error("❌ Inventory report error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// MONTHLY SALES - NEW
-app.get("/api/reports/monthlySales", (req, res) => {
+app.get("/api/reports/monthlySales", async (req, res) => {
   console.log("📈 Building monthly sales report...");
-  const sql = `
-    SELECT DatePart('yyyy', ORDER_DATE) as year, DatePart('m', ORDER_DATE) as month,
-           SUM(AMOUNT_US) as total, COUNT(*) as orders
-    FROM TBL_ORDERS
-    GROUP BY DatePart('yyyy', ORDER_DATE), DatePart('m', ORDER_DATE)
-    ORDER BY DatePart('yyyy', ORDER_DATE) ASC, DatePart('m', ORDER_DATE) ASC
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Monthly sales report error:", err.message);
-      return res.status(500).json([]);
-    }
+  try {
+    const result = await db.query(`
+      SELECT EXTRACT(YEAR FROM ORDER_DATE) as year, EXTRACT(MONTH FROM ORDER_DATE) as month,
+             SUM(AMOUNT_US) as total, COUNT(*) as orders
+      FROM TBL_ORDERS
+      GROUP BY EXTRACT(YEAR FROM ORDER_DATE), EXTRACT(MONTH FROM ORDER_DATE)
+      ORDER BY EXTRACT(YEAR FROM ORDER_DATE) ASC, EXTRACT(MONTH FROM ORDER_DATE) ASC
+    `);
+    
     const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    res.json(rows.map(r => ({
-      month: `${MONTH_NAMES[(r.month || 1) - 1]} ${r.year}`.trim(),
-      revenue: Number(r.total) || 0,
-      orders: Number(r.orders) || 0
-    })));
-  });
+    const formatted = result.rows.map(r => ({
+      month: `${MONTH_NAMES[(parseInt(r.month) || 1) - 1]} ${parseInt(r.year)}`,
+      revenue: parseFloat(r.total) || 0,
+      orders: parseInt(r.orders) || 0
+    }));
+    res.json(formatted);
+  } catch (err) {
+    console.error("❌ Monthly sales error:", err.message);
+    res.status(500).json([]);
+  }
 });
 
-// PRODUCT PERFORMANCE - NEW
-app.get("/api/reports/productPerformance", (req, res) => {
+app.get("/api/reports/productPerformance", async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   console.log(`📈 Building product performance report (top ${limit})...`);
-  const sql = `
-    SELECT TOP ${limit} p.NAME_EN as name,
-           SUM(od.QTY_ORDER) as sales,
-           SUM(od.QTY_ORDER * od.PRICE) as revenue
-    FROM TBL_ORDERS_DETAILS od
-    INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
-    GROUP BY p.NAME_EN
-    ORDER BY SUM(od.QTY_ORDER) DESC
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Product performance report error:", err.message);
-      return res.status(500).json([]);
-    }
-    res.json(rows.map(r => ({
+  
+  try {
+    const result = await db.query(`
+      SELECT p.NAME_EN as name,
+             SUM(od.QTY_ORDER) as sales,
+             SUM(od.QTY_ORDER * od.PRICE) as revenue
+      FROM TBL_ORDERS_DETAILS od
+      INNER JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
+      GROUP BY p.NAME_EN
+      ORDER BY SUM(od.QTY_ORDER) DESC
+      LIMIT $1
+    `, [limit]);
+    
+    const formatted = result.rows.map(r => ({
       name: r.name || "Unknown",
-      sales: Number(r.sales) || 0,
-      revenue: Number(r.revenue) || 0
-    })));
-  });
+      sales: parseFloat(r.sales) || 0,
+      revenue: parseFloat(r.revenue) || 0
+    }));
+    res.json(formatted);
+  } catch (err) {
+    console.error("❌ Product performance error:", err.message);
+    res.status(500).json([]);
+  }
 });
 
-// CUSTOMER ANALYTICS - NEW
-app.get("/api/reports/customerAnalytics", (req, res) => {
+app.get("/api/reports/customerAnalytics", async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 20, 50);
   console.log(`📈 Building customer analytics report (top ${limit})...`);
-  const sql = `
-    SELECT TOP ${limit} c.CUS_ID as id,
-           c.FIRST_NAME & ' ' & c.LAST_NAME as name,
-           COUNT(o.OR_ID) as orders,
-           SUM(o.AMOUNT_US) as totalSpent
-    FROM TBL_CUSTOMERS c
-    LEFT JOIN TBL_ORDERS o ON c.ID = o.CUSTOMER_ID
-    GROUP BY c.CUS_ID, c.FIRST_NAME, c.LAST_NAME
-    ORDER BY SUM(o.AMOUNT_US) DESC
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Customer analytics report error:", err.message);
-      return res.status(500).json([]);
-    }
-    res.json(rows.map(r => ({
+  
+  try {
+    const result = await db.query(`
+      SELECT c.CUS_ID as id,
+             CONCAT(c.FIRST_NAME, ' ', c.LAST_NAME) as name,
+             COUNT(o.OR_ID) as orders,
+             COALESCE(SUM(o.AMOUNT_US), 0) as totalSpent
+      FROM TBL_CUSTOMERS c
+      LEFT JOIN TBL_ORDERS o ON c.ID = o.CUSTOMER_ID
+      GROUP BY c.CUS_ID, c.FIRST_NAME, c.LAST_NAME
+      ORDER BY COALESCE(SUM(o.AMOUNT_US), 0) DESC
+      LIMIT $1
+    `, [limit]);
+    
+    const formatted = result.rows.map(r => ({
       id: r.id || "Unknown",
       name: (r.name || "Unknown").trim(),
-      orders: Number(r.orders) || 0,
-      totalSpent: Number(r.totalSpent) || 0,
-      avgOrder: Number(r.orders) > 0 ? Number(r.totalSpent) / Number(r.orders) : 0
-    })));
-  });
+      orders: parseInt(r.orders) || 0,
+      totalSpent: parseFloat(r.totalSpent) || 0,
+      avgOrder: parseInt(r.orders) > 0 ? parseFloat(r.totalSpent) / parseInt(r.orders) : 0
+    }));
+    res.json(formatted);
+  } catch (err) {
+    console.error("❌ Customer analytics error:", err.message);
+    res.status(500).json([]);
+  }
 });
 
-// REVENUE SUMMARY - NEW
-app.get("/api/reports/revenueSummary", (req, res) => {
+app.get("/api/reports/revenueSummary", async (req, res) => {
   console.log("📈 Building revenue summary report...");
-  const currentSql = `SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders FROM TBL_ORDERS WHERE ORDER_DATE >= DateAdd('d', -30, Date())`;
-  const previousSql = `SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders FROM TBL_ORDERS WHERE ORDER_DATE >= DateAdd('d', -60, Date()) AND ORDER_DATE < DateAdd('d', -30, Date())`;
-  const totalCustomersSql = `SELECT COUNT(*) as count FROM TBL_CUSTOMERS`;
-  const totalProductsSql = `SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'`;
+  
+  try {
+    const currentResult = await db.query(
+      `SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue, COUNT(*) as orders 
+       FROM TBL_ORDERS WHERE ORDER_DATE >= CURRENT_DATE - INTERVAL '30 days'`
+    );
+    
+    const previousResult = await db.query(
+      `SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue, COUNT(*) as orders 
+       FROM TBL_ORDERS WHERE ORDER_DATE >= CURRENT_DATE - INTERVAL '60 days' 
+       AND ORDER_DATE < CURRENT_DATE - INTERVAL '30 days'`
+    );
+    
+    const customersResult = await db.query("SELECT COUNT(*) as count FROM TBL_CUSTOMERS");
+    const productsResult = await db.query("SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'");
 
-  let completed = 0;
-  const total = 4;
-  let currentRevenue = 0, currentOrders = 0;
-  let previousRevenue = 0, previousOrders = 0;
-  let totalCustomers = 0, totalProducts = 0;
+    const currentRevenue = parseFloat(currentResult.rows[0]?.revenue || 0);
+    const currentOrders = parseInt(currentResult.rows[0]?.orders || 0);
+    const previousRevenue = parseFloat(previousResult.rows[0]?.revenue || 0);
+    const previousOrders = parseInt(previousResult.rows[0]?.orders || 0);
+    const totalCustomers = parseInt(customersResult.rows[0]?.count || 0);
+    const totalProducts = parseInt(productsResult.rows[0]?.count || 0);
 
-  const finish = () => {
-    completed++;
-    if (completed !== total) return;
     res.json({
       totalRevenue: currentRevenue,
       totalOrders: currentOrders,
@@ -1218,33 +1145,15 @@ app.get("/api/reports/revenueSummary", (req, res) => {
       revenueGrowth: previousRevenue ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100) : 0,
       orderGrowth: previousOrders ? Math.round(((currentOrders - previousOrders) / previousOrders) * 100) : 0
     });
-  };
-
-  dbModule.get(currentSql, [], (err, row) => {
-    if (!err && row) { currentRevenue = Number(row.revenue) || 0; currentOrders = Number(row.orders) || 0; }
-    finish();
-  });
-
-  dbModule.get(previousSql, [], (err, row) => {
-    if (!err && row) { previousRevenue = Number(row.revenue) || 0; previousOrders = Number(row.orders) || 0; }
-    finish();
-  });
-
-  dbModule.get(totalCustomersSql, [], (err, row) => {
-    if (!err && row) { totalCustomers = Number(row.count) || 0; }
-    finish();
-  });
-
-  dbModule.get(totalProductsSql, [], (err, row) => {
-    if (!err && row) { totalProducts = Number(row.count) || 0; }
-    finish();
-  });
+  } catch (err) {
+    console.error("❌ Revenue summary error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // ANALYTICS API
 // ============================================
-
 function getStartDateForRange(range) {
   const d = new Date();
   switch (range) {
@@ -1256,71 +1165,64 @@ function getStartDateForRange(range) {
   return d.toISOString().slice(0, 10);
 }
 
-function num(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-app.get("/api/analytics/monthly-revenue", (req, res) => {
+app.get("/api/analytics/monthly-revenue", async (req, res) => {
   const { range = "last6months" } = req.query;
   const startDate = getStartDateForRange(range);
   console.log(`📊 Fetching monthly revenue (range=${range}, since ${startDate})...`);
 
-  const sql = `
-    SELECT DatePart('yyyy', ORDER_DATE) as year, DatePart('m', ORDER_DATE) as month,
-           SUM(AMOUNT_US) as revenue, COUNT(*) as orders
-    FROM TBL_ORDERS WHERE ORDER_DATE >= #${startDate}#
-    GROUP BY DatePart('yyyy', ORDER_DATE), DatePart('m', ORDER_DATE)
-    ORDER BY DatePart('yyyy', ORDER_DATE) ASC, DatePart('m', ORDER_DATE) ASC
-  `;
+  try {
+    const result = await db.query(`
+      SELECT EXTRACT(YEAR FROM ORDER_DATE) as year, EXTRACT(MONTH FROM ORDER_DATE) as month,
+             SUM(AMOUNT_US) as revenue, COUNT(*) as orders
+      FROM TBL_ORDERS WHERE ORDER_DATE >= $1
+      GROUP BY EXTRACT(YEAR FROM ORDER_DATE), EXTRACT(MONTH FROM ORDER_DATE)
+      ORDER BY EXTRACT(YEAR FROM ORDER_DATE) ASC, EXTRACT(MONTH FROM ORDER_DATE) ASC
+    `, [startDate]);
 
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Monthly revenue error:", err.message);
-      return res.json([]);
-    }
-    const formatted = rows.map((row) => ({
-      month: `${MONTH_NAMES[(row.month || 1) - 1]} ${row.year || ""}`.trim(),
-      revenue: num(row.revenue),
-      orders: num(row.orders),
+    const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const formatted = result.rows.map((row) => ({
+      month: `${MONTH_NAMES[(parseInt(row.month) || 1) - 1]} ${parseInt(row.year)}`,
+      revenue: parseFloat(row.revenue) || 0,
+      orders: parseInt(row.orders) || 0,
     }));
     console.log(`📊 Monthly revenue: ${formatted.length} rows`);
     res.json(formatted);
-  });
+  } catch (err) {
+    console.error("❌ Monthly revenue error:", err.message);
+    res.json([]);
+  }
 });
 
-app.get("/api/analytics/top-products", (req, res) => {
+app.get("/api/analytics/top-products", async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 10, 50);
   console.log(`📊 Fetching top ${limit} products...`);
 
-  const sql = `
-    SELECT TOP ${limit} p.NAME_EN as product_name,
-           SUM(od.QTY_ORDER) as total_sold,
-           SUM(od.QTY_ORDER * od.PRICE) as revenue
-    FROM TBL_ORDERS_DETAILS od
-    LEFT JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
-    GROUP BY p.NAME_EN
-    ORDER BY SUM(od.QTY_ORDER) DESC
-  `;
+  try {
+    const result = await db.query(`
+      SELECT p.NAME_EN as product_name,
+             SUM(od.QTY_ORDER) as total_sold,
+             SUM(od.QTY_ORDER * od.PRICE) as revenue
+      FROM TBL_ORDERS_DETAILS od
+      LEFT JOIN TBL_PRODUCTS p ON od.PRODUCT_ID = p.ID
+      GROUP BY p.NAME_EN
+      ORDER BY SUM(od.QTY_ORDER) DESC
+      LIMIT $1
+    `, [limit]);
 
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Top products error:", err.message);
-      return res.json([]);
-    }
-    const formatted = rows.map((r) => ({
+    const formatted = result.rows.map((r) => ({
       product_name: r.product_name || "Unknown",
-      total_sold: num(r.total_sold),
-      revenue: num(r.revenue),
+      total_sold: parseFloat(r.total_sold) || 0,
+      revenue: parseFloat(r.revenue) || 0,
     }));
     console.log(`📊 Top products: ${formatted.length} rows`);
     res.json(formatted);
-  });
+  } catch (err) {
+    console.error("❌ Top products error:", err.message);
+    res.json([]);
+  }
 });
 
-app.get("/api/analytics/customer-history/:id", (req, res) => {
+app.get("/api/analytics/customer-history/:id", async (req, res) => {
   const customerId = parseInt(req.params.id, 10);
   if (!Number.isFinite(customerId)) {
     console.warn(`⚠️ Invalid customer id: ${req.params.id}`);
@@ -1328,76 +1230,77 @@ app.get("/api/analytics/customer-history/:id", (req, res) => {
   }
   console.log(`📊 Fetching customer history for ID: ${customerId}`);
 
-  const sql = `
-    SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as amount, STATUS
-    FROM TBL_ORDERS WHERE CUSTOMER_ID = ${customerId}
-    ORDER BY ORDER_DATE DESC
-  `;
+  try {
+    const result = await db.query(`
+      SELECT ORDER_NO, ORDER_DATE, AMOUNT_US as amount, STATUS
+      FROM TBL_ORDERS WHERE CUSTOMER_ID = $1
+      ORDER BY ORDER_DATE DESC
+    `, [customerId]);
 
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Customer history error:", err.message);
-      return res.status(500).json([]);
-    }
-    const formatted = rows.map((r) => ({
+    const formatted = result.rows.map((r) => ({
       ORDER_NO: r.ORDER_NO,
       ORDER_DATE: r.ORDER_DATE,
-      amount: num(r.amount),
+      amount: parseFloat(r.amount) || 0,
       STATUS: r.STATUS || "Pending",
     }));
     console.log(`📊 Customer history: ${formatted.length} orders`);
     res.json(formatted);
-  });
+  } catch (err) {
+    console.error("❌ Customer history error:", err.message);
+    res.status(500).json([]);
+  }
 });
 
-app.get("/api/analytics/yearly-revenue", (req, res) => {
+app.get("/api/analytics/yearly-revenue", async (req, res) => {
   console.log("📊 Fetching yearly revenue...");
-  const sql = `
-    SELECT DatePart('yyyy', ORDER_DATE) as year,
-           SUM(AMOUNT_US) as revenue, COUNT(*) as orders
-    FROM TBL_ORDERS
-    GROUP BY DatePart('yyyy', ORDER_DATE)
-    ORDER BY DatePart('yyyy', ORDER_DATE) ASC
-  `;
-  dbModule.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error("❌ Yearly revenue error:", err.message);
-      return res.json([]);
-    }
-    const formatted = rows.map((r) => ({
-      year: String(r.year),
-      revenue: num(r.revenue),
-      orders: num(r.orders),
+  try {
+    const result = await db.query(`
+      SELECT EXTRACT(YEAR FROM ORDER_DATE) as year,
+             SUM(AMOUNT_US) as revenue, COUNT(*) as orders
+      FROM TBL_ORDERS
+      GROUP BY EXTRACT(YEAR FROM ORDER_DATE)
+      ORDER BY EXTRACT(YEAR FROM ORDER_DATE) ASC
+    `);
+
+    const formatted = result.rows.map((r) => ({
+      year: String(parseInt(r.year)),
+      revenue: parseFloat(r.revenue) || 0,
+      orders: parseInt(r.orders) || 0,
     }));
     console.log(`📊 Yearly revenue: ${formatted.length} years`);
     res.json(formatted);
-  });
+  } catch (err) {
+    console.error("❌ Yearly revenue error:", err.message);
+    res.json([]);
+  }
 });
 
-app.get("/api/analytics/summary", (req, res) => {
+app.get("/api/analytics/summary", async (req, res) => {
   console.log("📊 Fetching analytics summary...");
 
-  const currentSql = `
-    SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders
-    FROM TBL_ORDERS
-    WHERE DatePart('m', ORDER_DATE) = DatePart('m', Date())
-    AND DatePart('yyyy', ORDER_DATE) = DatePart('yyyy', Date())
-  `;
-  const previousSql = `
-    SELECT SUM(AMOUNT_US) as revenue, COUNT(*) as orders
-    FROM TBL_ORDERS
-    WHERE DatePart('m', ORDER_DATE) = DatePart('m', DateAdd('m', -1, Date()))
-    AND DatePart('yyyy', ORDER_DATE) = DatePart('yyyy', DateAdd('m', -1, Date()))
-  `;
-  const productsSql = `SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'`;
+  try {
+    const currentResult = await db.query(`
+      SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue, COUNT(*) as orders
+      FROM TBL_ORDERS
+      WHERE EXTRACT(MONTH FROM ORDER_DATE) = EXTRACT(MONTH FROM CURRENT_DATE)
+      AND EXTRACT(YEAR FROM ORDER_DATE) = EXTRACT(YEAR FROM CURRENT_DATE)
+    `);
 
-  let completed = 0;
-  const total = 3;
-  let currentRevenue = 0, currentOrders = 0, previousRevenue = 0, previousOrders = 0, totalProducts = 0;
+    const previousResult = await db.query(`
+      SELECT COALESCE(SUM(AMOUNT_US), 0) as revenue, COUNT(*) as orders
+      FROM TBL_ORDERS
+      WHERE EXTRACT(MONTH FROM ORDER_DATE) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month')
+      AND EXTRACT(YEAR FROM ORDER_DATE) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month')
+    `);
 
-  const finish = () => {
-    completed++;
-    if (completed !== total) return;
+    const productsResult = await db.query("SELECT COUNT(*) as count FROM TBL_PRODUCTS WHERE STATUS = 'Active'");
+
+    const currentRevenue = parseFloat(currentResult.rows[0]?.revenue || 0);
+    const currentOrders = parseInt(currentResult.rows[0]?.orders || 0);
+    const previousRevenue = parseFloat(previousResult.rows[0]?.revenue || 0);
+    const previousOrders = parseInt(previousResult.rows[0]?.orders || 0);
+    const totalProducts = parseInt(productsResult.rows[0]?.count || 0);
+
     res.json({
       totalRevenue: currentRevenue,
       totalOrders: currentOrders,
@@ -1406,40 +1309,28 @@ app.get("/api/analytics/summary", (req, res) => {
       revenueGrowth: previousRevenue ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100) : 0,
       orderGrowth: previousOrders ? Math.round(((currentOrders - previousOrders) / previousOrders) * 100) : 0,
     });
-  };
-
-  dbModule.get(currentSql, [], (err, row) => {
-    if (!err && row) { currentRevenue = num(row.revenue); currentOrders = num(row.orders); }
-    finish();
-  });
-
-  dbModule.get(previousSql, [], (err, row) => {
-    if (!err && row) { previousRevenue = num(row.revenue); previousOrders = num(row.orders); }
-    finish();
-  });
-
-  dbModule.get(productsSql, [], (err, row) => {
-    if (!err && row) { totalProducts = num(row.count); }
-    finish();
-  });
+  } catch (err) {
+    console.error("❌ Analytics summary error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // USER MANAGEMENT
 // ============================================
-
-app.get("/api/users", (req, res) => {
+app.get("/api/users", async (req, res) => {
   console.log("👥 Fetching users...");
-  dbModule.all("SELECT UserID, Username, FullName, Role, Status, CreatedAt FROM Tbl_Users", [], (err, rows) => {
-    if (err) {
-      console.error("❌ Users error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    if (!rows || rows.length === 0) {
+  try {
+    const result = await db.query(
+      "SELECT UserID, Username, FullName, Role, Status, CreatedAt FROM Tbl_Users"
+    );
+    
+    if (result.rows.length === 0) {
       console.log("⚠️ No users found");
       return res.json([]);
     }
-    const mappedUsers = rows.map((user) => ({
+    
+    const mappedUsers = result.rows.map((user) => ({
       user_id: user.UserID,
       username: user.Username || "",
       fullname: user.FullName || "",
@@ -1450,10 +1341,13 @@ app.get("/api/users", (req, res) => {
     }));
     console.log(`✅ Found ${mappedUsers.length} users`);
     res.json(mappedUsers);
-  });
+  } catch (err) {
+    console.error("❌ Users error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post("/api/users", (req, res) => {
+app.post("/api/users", async (req, res) => {
   console.log("📝 Request body:", req.body);
   const { username, password, fullname, role_id } = req.body;
 
@@ -1465,39 +1359,33 @@ app.post("/api/users", (req, res) => {
   const roleMap = { 1: "Admin", 2: "Cashier", 3: "Viewer" };
   const role = roleMap[String(role_id)] || "Cashier";
 
-  const safeUsername = username.replace(/'/g, "''");
-  const safePassword = password.replace(/'/g, "''");
-  const safeFullname = (fullname || username).replace(/'/g, "''");
-
-  dbModule.get(`SELECT UserID FROM Tbl_Users WHERE Username = '${safeUsername}'`, [], (err, existing) => {
-    if (err) {
-      console.error("❌ Check user error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    if (existing) {
+  try {
+    const existingResult = await db.query(
+      "SELECT UserID FROM Tbl_Users WHERE Username = $1",
+      [username]
+    );
+    
+    if (existingResult.rows.length > 0) {
       return res.status(400).json({ error: "Username already exists" });
     }
 
-    const sql = `
-      INSERT INTO Tbl_Users (Username, Password, FullName, Role, Status) 
-      VALUES ('${safeUsername}', '${safePassword}', '${safeFullname}', '${role}', 'ACTIVE')
-    `;
+    const result = await db.query(
+      `INSERT INTO Tbl_Users (Username, Password, FullName, Role, Status) 
+       VALUES ($1, $2, $3, $4, 'ACTIVE') RETURNING UserID`,
+      [username, password, fullname || username, role]
+    );
 
-    console.log("📝 SQL:", sql);
-
-    dbModule.run(sql, [], function (err) {
-      if (err) {
-        console.error("❌ Create user error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      console.log("✅ User created with ID:", this.lastID);
-      logActivity(req.body.user_id || 1, "Created user", "Tbl_Users", this.lastID);
-      res.json({ user_id: this.lastID, message: "User created successfully" });
-    });
-  });
+    const userId = result.rows[0].UserID;
+    console.log("✅ User created with ID:", userId);
+    logActivity(req.body.user_id || 1, "Created user", "Tbl_Users", userId);
+    res.json({ user_id: userId, message: "User created successfully" });
+  } catch (err) {
+    console.error("❌ Create user error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put("/api/users/:id", (req, res) => {
+app.put("/api/users/:id", async (req, res) => {
   const { id } = req.params;
   const { username, password, fullname, role_id } = req.body;
 
@@ -1510,48 +1398,44 @@ app.put("/api/users/:id", (req, res) => {
   const roleMap = { 1: "Admin", 2: "Cashier", 3: "Viewer" };
   const role = roleMap[String(role_id)] || "Cashier";
 
-  const safeUsername = username.replace(/'/g, "''");
-  const safeFullname = (fullname || username).replace(/'/g, "''");
-
-  dbModule.get(`SELECT UserID FROM Tbl_Users WHERE Username = '${safeUsername}' AND UserID != ${id}`, [], (err, existing) => {
-    if (err) {
-      console.error("❌ Check user error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    if (existing) {
+  try {
+    const existingResult = await db.query(
+      "SELECT UserID FROM Tbl_Users WHERE Username = $1 AND UserID != $2",
+      [username, id]
+    );
+    
+    if (existingResult.rows.length > 0) {
       return res.status(400).json({ error: "Username already exists" });
     }
 
-    let sql = `
-      UPDATE Tbl_Users 
-      SET Username = '${safeUsername}', FullName = '${safeFullname}', Role = '${role}'
-    `;
+    let query = `UPDATE Tbl_Users SET Username = $1, FullName = $2, Role = $3`;
+    const params = [username, fullname || username, role];
 
     if (password && password.trim() !== "") {
-      const safePassword = password.replace(/'/g, "''");
-      sql += `, Password = '${safePassword}'`;
+      query += `, Password = $4`;
+      params.push(password);
+      query += ` WHERE UserID = $${params.length}`;
+    } else {
+      query += ` WHERE UserID = $${params.length + 1}`;
+    }
+    params.push(id);
+
+    const result = await db.query(query, params);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "User not found" });
     }
 
-    sql += ` WHERE UserID = ${id}`;
-
-    console.log("📝 SQL:", sql);
-
-    dbModule.run(sql, [], function (err) {
-      if (err) {
-        console.error("❌ Update user error:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: "User not found" });
-      }
-      console.log("✅ User updated, ID:", id);
-      logActivity(req.body.user_id || 1, "Updated user", "Tbl_Users", id);
-      res.json({ message: "User updated successfully" });
-    });
-  });
+    console.log("✅ User updated, ID:", id);
+    logActivity(req.body.user_id || 1, "Updated user", "Tbl_Users", id);
+    res.json({ message: "User updated successfully" });
+  } catch (err) {
+    console.error("❌ Update user error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete("/api/users/:id", (req, res) => {
+app.delete("/api/users/:id", async (req, res) => {
   const { id } = req.params;
   console.log("🗑️ Deleting user ID:", id);
 
@@ -1559,131 +1443,125 @@ app.delete("/api/users/:id", (req, res) => {
     return res.status(400).json({ error: "Cannot delete the main admin user" });
   }
 
-  dbModule.run(`DELETE FROM Tbl_Users WHERE UserID = ${id}`, [], function (err) {
-    if (err) {
-      console.error("❌ Delete user error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await db.query(
+      "DELETE FROM Tbl_Users WHERE UserID = $1",
+      [id]
+    );
+
+    if (result.rowCount === 0) {
       return res.status(404).json({ error: "User not found" });
     }
+
     console.log("✅ User deleted, ID:", id);
     logActivity(req.body.user_id || 1, "Deleted user", "Tbl_Users", id);
     res.json({ message: "User deleted successfully" });
-  });
+  } catch (err) {
+    console.error("❌ Delete user error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // WARRANTY API
 // ============================================
-
-app.get("/api/warranty", (req, res) => {
+app.get("/api/warranty", async (req, res) => {
   console.log("🛡️ Fetching warranty records...");
-  dbModule.all("SELECT * FROM Tbl_Warranty ORDER BY WarrantyID DESC", [], (err, rows) => {
-    if (err) {
-      console.error("❌ Warranty error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`🛡️ Warranty records found: ${rows.length}`);
-    res.json(rows);
-  });
+  try {
+    const result = await db.query("SELECT * FROM Tbl_Warranty ORDER BY WarrantyID DESC");
+    console.log(`🛡️ Warranty records found: ${result.rows.length}`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Warranty error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post("/api/warranty", (req, res) => {
+app.post("/api/warranty", async (req, res) => {
   const { CustomerID, ProductID, SerialNumber, WarrantyPeriod, WarrantyStartDate } = req.body;
 
   const startDate = new Date(WarrantyStartDate);
   const endDate = new Date(startDate);
   endDate.setMonth(endDate.getMonth() + Number(WarrantyPeriod || 12));
 
-  const sql = `
-    INSERT INTO Tbl_Warranty (CustomerID, ProductID, SerialNumber, WarrantyPeriod, WarrantyStartDate, WarrantyEndDate, Status)
-    VALUES ('${CustomerID}', '${ProductID}', '${(SerialNumber || "").replace(/'/g, "''")}', ${Number(WarrantyPeriod) || 12},
-            '${WarrantyStartDate}', '${endDate.toISOString().split("T")[0]}', 'Active')
-  `;
-
-  dbModule.run(sql, [], function (err) {
-    if (err) {
-      console.error("❌ Create warranty error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json({ warranty_id: this.lastID, message: "Warranty created successfully" });
-  });
+  try {
+    const result = await db.query(
+      `INSERT INTO Tbl_Warranty (CustomerID, ProductID, SerialNumber, WarrantyPeriod, WarrantyStartDate, WarrantyEndDate, Status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'Active') RETURNING WarrantyID`,
+      [CustomerID, ProductID, SerialNumber || null, Number(WarrantyPeriod) || 12, WarrantyStartDate, endDate.toISOString().split("T")[0]]
+    );
+    res.json({ warranty_id: result.rows[0].WarrantyID, message: "Warranty created successfully" });
+  } catch (err) {
+    console.error("❌ Create warranty error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // SERVICE REQUESTS API
 // ============================================
-
-app.get("/api/services", (req, res) => {
+app.get("/api/services", async (req, res) => {
   console.log("🔧 Fetching service requests...");
-  dbModule.all("SELECT * FROM Tbl_Service_Requests ORDER BY ServiceID DESC", [], (err, rows) => {
-    if (err) {
-      console.error("❌ Services error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    console.log(`🔧 Service requests found: ${rows.length}`);
-    res.json(rows);
-  });
+  try {
+    const result = await db.query("SELECT * FROM Tbl_Service_Requests ORDER BY ServiceID DESC");
+    console.log(`🔧 Service requests found: ${result.rows.length}`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("❌ Services error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post("/api/services", (req, res) => {
+app.post("/api/services", async (req, res) => {
   const { CustomerID, ProductID, SerialNumber, WarrantyID, IssueDescription, ServiceType, Status, EstimatedCost } = req.body;
 
   const serviceNo = `SRV-${Date.now()}`;
 
-  const sql = `
-    INSERT INTO Tbl_Service_Requests (ServiceNo, CustomerID, ProductID, SerialNumber, WarrantyID,
-      IssueDescription, ServiceType, Status, ReceivedDate, EstimatedCost)
-    VALUES ('${serviceNo}', '${CustomerID}', '${ProductID}', '${(SerialNumber || "").replace(/'/g, "''")}',
-            '${WarrantyID || "NULL"}', '${(IssueDescription || "").replace(/'/g, "''")}', '${ServiceType || "Repair"}',
-            '${Status || "PENDING"}', Date(), ${Number(EstimatedCost) || 0})
-  `;
-
-  dbModule.run(sql, [], function (err) {
-    if (err) {
-      console.error("❌ Create service error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-    res.json({ service_id: this.lastID, message: "Service request created successfully" });
-  });
+  try {
+    const result = await db.query(
+      `INSERT INTO Tbl_Service_Requests (ServiceNo, CustomerID, ProductID, SerialNumber, WarrantyID,
+        IssueDescription, ServiceType, Status, ReceivedDate, EstimatedCost)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_DATE, $9) RETURNING ServiceID`,
+      [serviceNo, CustomerID, ProductID, SerialNumber || null, WarrantyID || null, IssueDescription || null, ServiceType || "Repair", Status || "PENDING", Number(EstimatedCost) || 0]
+    );
+    res.json({ service_id: result.rows[0].ServiceID, message: "Service request created successfully" });
+  } catch (err) {
+    console.error("❌ Create service error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // PAYMENT API
 // ============================================
-
 app.post("/api/payments/create-payment-intent", async (req, res) => {
   const { amount, orderId } = req.body;
   res.json({ clientSecret: "mock_secret_" + Date.now(), message: "Payment intent created (mock)" });
 });
 
-app.post("/api/payments/record", (req, res) => {
+app.post("/api/payments/record", async (req, res) => {
   const { OR_ID, AMOUNT_US, AMOUNT_KH, REFERENCE_I, EMP_ID } = req.body;
 
-  const sql = `
-    INSERT INTO TBL_PAYMENT (OR_ID, AMOUNT_US, AMOUNT_KH, PAY_DATE, STATUS)
-    VALUES (${Number(OR_ID)}, ${AMOUNT_US || 0}, ${AMOUNT_KH || 0}, Date(), 'COMPLETED')
-  `;
-
-  dbModule.run(sql, [], function (err) {
-    if (err) {
-      console.error("❌ Payment record error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
+  try {
+    const result = await db.query(
+      `INSERT INTO TBL_PAYMENT (OR_ID, AMOUNT_US, AMOUNT_KH, PAY_DATE, STATUS)
+       VALUES ($1, $2, $3, CURRENT_DATE, 'COMPLETED')`,
+      [Number(OR_ID), AMOUNT_US || 0, AMOUNT_KH || 0]
+    );
     res.json({ message: "Payment recorded" });
-  });
+  } catch (err) {
+    console.error("❌ Payment record error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // PURCHASE
 // ============================================
-app.post("/api/purchase", (req, res) => {
+app.post("/api/purchase", async (req, res) => {
   const { CUSTOMER_ID, items, DISCOUNT = 0, STATUS = "Pending", EMP_PREPARE = 1, NOTES = "" } = req.body;
 
   console.log("📦 Processing purchase order...");
-  console.log("📦 Customer ID:", CUSTOMER_ID);
-  console.log("📦 Items:", items);
 
   if (!CUSTOMER_ID) {
     return res.status(400).json({ error: "Customer ID is required" });
@@ -1692,216 +1570,130 @@ app.post("/api/purchase", (req, res) => {
     return res.status(400).json({ error: "At least one item is required" });
   }
 
-  const customerIdText = String(CUSTOMER_ID);
-  const findCustomerSql = `SELECT ID, CUS_ID FROM TBL_CUSTOMERS WHERE CUS_ID = '${customerIdText}'`;
+  try {
+    // Get customer
+    const customerResult = await db.query(
+      "SELECT ID, CUS_ID FROM TBL_CUSTOMERS WHERE CUS_ID = $1",
+      [CUSTOMER_ID]
+    );
 
-  dbModule.get(findCustomerSql, [], (err, customer) => {
-    if (err) {
-      console.error("❌ Customer check error:", err.message);
-      return res.status(500).json({ error: err.message });
-    }
-
-    if (!customer) {
-      console.error("❌ Customer not found:", CUSTOMER_ID);
+    if (customerResult.rows.length === 0) {
       return res.status(400).json({ error: `Customer with ID ${CUSTOMER_ID} not found` });
     }
 
+    const customer = customerResult.rows[0];
     const numericCustomerId = customer.ID;
-    console.log(`✅ Customer found: ${customer.CUS_ID} with numeric ID: ${numericCustomerId}`);
 
-    let productCheckCompleted = 0;
-    const totalItems = items.length;
-    let hasError = false;
-    let errorMessages = [];
-    const productIdMap = {};
-
+    // Calculate total amount
+    let totalAmount = 0;
     items.forEach((item) => {
-      const productIdText = String(item.product_id || "");
-
-      if (!productIdText || productIdText === "null" || productIdText === "undefined" || productIdText === "") {
-        errorMessages.push(`Invalid product ID: ${productIdText}`);
-        hasError = true;
-        productCheckCompleted++;
-        if (productCheckCompleted === totalItems) {
-          if (hasError) {
-            return res.status(400).json({ error: "Invalid product IDs found", details: errorMessages });
-          }
-          proceedWithOrder();
-        }
-        return;
-      }
-
-      const checkProductSql = `SELECT ID, PRODUCT_ID FROM TBL_PRODUCTS WHERE PRODUCT_ID = '${productIdText}'`;
-
-      dbModule.get(checkProductSql, [], (err, product) => {
-        if (err) {
-          console.error("❌ Product check error:", err.message);
-          hasError = true;
-          errorMessages.push(`Error checking product ${productIdText}: ${err.message}`);
-        } else if (!product) {
-          console.error("❌ Product not found:", productIdText);
-          hasError = true;
-          errorMessages.push(`Product with ID ${productIdText} not found`);
-        } else {
-          productIdMap[productIdText] = product.ID;
-          console.log(`✅ Product found: ${product.PRODUCT_ID} with numeric ID: ${product.ID}`);
-        }
-
-        productCheckCompleted++;
-        if (productCheckCompleted === totalItems) {
-          if (hasError) {
-            return res.status(400).json({ error: "Product validation failed", details: errorMessages });
-          }
-          proceedWithOrder();
-        }
-      });
+      const qty = Number(item.qty) || 0;
+      const price = Number(item.unit_price) || 0;
+      const discount = Number(item.discount) || 0;
+      totalAmount += qty * price - discount;
     });
 
-    function proceedWithOrder() {
-      dbModule.serialize(() => {
-        const orderNo = `PO-${Date.now()}`;
-        let totalAmount = 0;
+    const discountAmount = Number(DISCOUNT) || 0;
+    totalAmount = Math.max(0, totalAmount - discountAmount);
 
-        items.forEach((item) => {
-          const qty = Number(item.qty) || 0;
-          const price = Number(item.unit_price) || 0;
-          const discount = Number(item.discount) || 0;
-          totalAmount += qty * price - discount;
-        });
+    const orderNo = `PO-${Date.now()}`;
 
-        const discountAmount = Number(DISCOUNT) || 0;
-        totalAmount = Math.max(0, totalAmount - discountAmount);
+    // Create order
+    const orderResult = await db.query(
+      `INSERT INTO TBL_ORDERS (ORDER_NO, CUSTOMER_ID, ORDER_DATE, AMOUNT_US, STATUS, EMP_PREPARE, DISCOUNT, NOTES)
+       VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6, $7) RETURNING OR_ID`,
+      [orderNo, numericCustomerId, totalAmount, STATUS || "Pending", EMP_PREPARE || 1, discountAmount, NOTES || ""]
+    );
 
-        const orderSql = `
-          INSERT INTO TBL_ORDERS (ORDER_NO, CUSTOMER_ID, ORDER_DATE, AMOUNT_US, STATUS, EMP_PREPARE, DISCOUNT, NOTES)
-          VALUES ('${orderNo}', ${numericCustomerId}, Date(), ${totalAmount}, '${STATUS}', ${EMP_PREPARE}, ${discountAmount}, '${(NOTES || "").replace(/'/g, "''")}')
-        `;
+    const orderId = orderResult.rows[0].OR_ID;
+    console.log(`✅ Order created: ${orderNo} (ID: ${orderId})`);
 
-        console.log("📝 SQL:", orderSql);
+    // Process items
+    for (const item of items) {
+      const productIdText = String(item.product_id || "");
+      const qty = Number(item.qty) || 0;
+      const price = Number(item.unit_price) || 0;
+      const discount = Number(item.discount) || 0;
+      const subtotal = qty * price - discount;
 
-        dbModule.run(orderSql, [], function (err) {
-          if (err) {
-            console.error("❌ Order creation error:", err.message);
-            return res.status(500).json({ error: "Failed to create order", details: err.message });
-          }
+      if (!productIdText || productIdText === "null" || productIdText === "undefined" || productIdText === "") {
+        console.warn("⚠️ Skipping item with invalid product ID");
+        continue;
+      }
 
-          const orderId = this.lastID;
-          console.log(`✅ Order created: ${orderNo} (ID: ${orderId})`);
-          processItems(orderId);
-        });
+      const productResult = await db.query(
+        "SELECT ID FROM TBL_PRODUCTS WHERE PRODUCT_ID = $1",
+        [productIdText]
+      );
 
-        function processItems(orderId) {
-          let completed = 0;
-          const totalItemsCount = items.length;
+      if (productResult.rows.length === 0) {
+        console.warn(`⚠️ Product ${productIdText} not found`);
+        continue;
+      }
 
-          items.forEach((item) => {
-            const productIdText = String(item.product_id || "");
-            const qty = Number(item.qty) || 0;
-            const price = Number(item.unit_price) || 0;
-            const discount = Number(item.discount) || 0;
-            const subtotal = qty * price - discount;
+      const numericProductId = productResult.rows[0].ID;
 
-            if (!productIdText || productIdText === "null" || productIdText === "undefined" || productIdText === "") {
-              console.warn("⚠️ Skipping item with invalid product ID");
-              completed++;
-              if (completed === totalItemsCount) {
-                res.json({ success: true, order_no: orderNo, order_id: orderId, message: "Order created with warnings" });
-              }
-              return;
-            }
+      await db.query(
+        `INSERT INTO TBL_ORDERS_DETAILS (OR_ID, PRODUCT_ID, QTY_ORDER, PRICE, SUBTOTAL)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [orderId, numericProductId, qty, price, subtotal]
+      );
 
-            const numericProductId = productIdMap[productIdText];
-            if (!numericProductId) {
-              console.warn(`⚠️ Product ${productIdText} not found in map`);
-              completed++;
-              if (completed === totalItemsCount) {
-                res.json({ success: true, order_no: orderNo, order_id: orderId, message: "Order created with warnings" });
-              }
-              return;
-            }
-
-            const detailSql = `
-              INSERT INTO TBL_ORDERS_DETAILS (OR_ID, PRODUCT_ID, QTY_ORDER, PRICE, SUBTOTAL)
-              VALUES (${orderId}, ${numericProductId}, ${qty}, ${price}, ${subtotal})
-            `;
-
-            dbModule.run(detailSql, [], function (err) {
-              if (err) {
-                console.error("❌ Order detail error:", err.message);
-              }
-
-              const stockSql = `
-                UPDATE Tbl_Stock SET QtyAvailable = QtyAvailable - ${qty}, QtyInStock = QtyInStock - ${qty}
-                WHERE ProductID = ${numericProductId}
-              `;
-
-              dbModule.run(stockSql, [], function (err) {
-                if (err) {
-                  console.warn("⚠️ Stock update error:", err.message);
-                }
-                completed++;
-                if (completed === totalItemsCount) {
-                  res.json({
-                    success: true,
-                    order_no: orderNo,
-                    order_id: orderId,
-                    message: "Order created successfully",
-                    order: {
-                      order_no: orderNo,
-                      order_id: orderId,
-                      customer_id: CUSTOMER_ID,
-                      amount: totalAmount,
-                      status: STATUS,
-                    },
-                  });
-                }
-              });
-            });
-          });
-        }
-      });
+      await db.query(
+        `UPDATE Tbl_Stock SET QtyAvailable = QtyAvailable - $1, QtyInStock = QtyInStock - $1
+         WHERE ProductID = $2`,
+        [qty, numericProductId]
+      );
     }
-  });
+
+    res.json({
+      success: true,
+      order_no: orderNo,
+      order_id: orderId,
+      message: "Order created successfully",
+      order: {
+        order_no: orderNo,
+        order_id: orderId,
+        customer_id: CUSTOMER_ID,
+        amount: totalAmount,
+        status: STATUS || "Pending",
+      },
+    });
+  } catch (err) {
+    console.error("❌ Purchase error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // TEST
 // ============================================
-
-app.get("/api/test", (req, res) => {
-  dbModule.get("SELECT 1 as test", [], (err, result) => {
-    if (err) res.status(500).json({ error: err.message });
-    else res.json({ success: true, result });
-  });
+app.get("/api/test", async (req, res) => {
+  try {
+    const result = await db.query("SELECT NOW() as test");
+    res.json({ success: true, result: result.rows[0] });
+  } catch (err) {
+    console.error("❌ Test error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ============================================
 // START SERVER
 // ============================================
-
 async function startServer() {
   console.log("🔄 Initializing database connection...");
 
   try {
-    const conn = await dbModule.initDatabase();
-    const isConnected = dbModule.isConnected();
-    
-    if (isConnected && conn) {
-      console.log('✅ Database connection established!');
-    } else {
-      console.log('⚠️ Running in DEMO MODE - Database not connected');
-      console.log('📝 Data will be mocked');
-    }
+    // Test PostgreSQL connection
+    const testResult = await db.query('SELECT NOW() as current_time');
+    console.log('✅ Database connection established!');
+    console.log(`📊 Connected to PostgreSQL at: ${testResult.rows[0].current_time}`);
 
     app.listen(PORT, () => {
       console.log("🚀 SPMS Backend running on http://localhost:" + PORT);
       console.log("📊 Test API: http://localhost:" + PORT + "/api/test");
-      
-      if (isConnected && conn) {
-        console.log("📁 Connected to Access database successfully!");
-      } else {
-        console.log("⚠️ Running in DEMO MODE - Some features may be limited");
-      }
+      console.log("📁 Connected to PostgreSQL database successfully!");
       
       console.log("");
       console.log("📋 Available Endpoints:");

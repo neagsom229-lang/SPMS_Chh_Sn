@@ -116,7 +116,7 @@ const Stock = () => {
 
     try {
       // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get("/stock", { timeout: 10000 });
+      const res = await api.get("/api/stock", { timeout: 10000 });
       if (isMounted.current) {
         if (res.data && res.data.length > 0) {
           setStock(res.data);

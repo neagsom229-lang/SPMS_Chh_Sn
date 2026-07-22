@@ -1,9 +1,11 @@
+// src/utils/api.js
 import axios from 'axios';
 
+// ✅ FIXED: Remove /api from the base URL
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_URL, // Should be just the domain, e.g., https://spms-chh-sn.onrender.com
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',

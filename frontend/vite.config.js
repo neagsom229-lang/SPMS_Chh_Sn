@@ -2,15 +2,21 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      // This ensures proper handling of JSX
+      jsxRuntime: 'automatic',
+    }),
+  ],
   
   server: {
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'https://spms-chh-sn.onrender.com', // Use your deployed backend
         changeOrigin: true,
         secure: false,
+        rewrite: (path) => path.replace(/^\/api/, '/api'),
       },
     },
   },
@@ -42,6 +48,5 @@ export default defineConfig({
     ],
   },
   
-  // For Vercel deployment
   base: '/',
 });

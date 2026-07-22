@@ -118,7 +118,7 @@ const Orders = () => {
   const fetchCustomers = useCallback(async () => {
     try {
       // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('/customers', { timeout: 10000 });
+      const res = await api.get('/api/customers', { timeout: 10000 });
       if (isMounted.current) {
         setCustomers(res.data || []);
       }
@@ -140,7 +140,7 @@ const Orders = () => {
   const fetchProducts = useCallback(async () => {
     try {
       // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('/products', { timeout: 10000 });
+      const res = await api.get('/api/products', { timeout: 10000 });
       if (isMounted.current) {
         setProducts(res.data || []);
       }
@@ -266,7 +266,7 @@ const Orders = () => {
       
       try {
         // ✅ FIXED: Removed '/api' prefix
-        const res = await api.get(`/stock/product/${item.product_id}`, { timeout: 5000 });
+        const res = await api.get(`/api/stock/product/${item.product_id}`, { timeout: 5000 });
         const available = res.data?.QtyAvailable || 0;
         
         if (available < item.qty) {
@@ -344,7 +344,7 @@ const Orders = () => {
       let response;
       try {
         // ✅ FIXED: Removed '/api' prefix
-        response = await api.post('/purchase', purchaseData);
+        response = await api.post('/api/purchase', purchaseData);
       } catch (apiError) {
         console.warn('⚠️ API purchase failed, using local storage:', apiError.response?.data || apiError.message);
         

@@ -104,7 +104,7 @@ const Users = () => {
     setLoading(true);
     try {
       // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('/users', {
+      const res = await api.get('api/users', {
         params: { search: searchTerm || undefined }
       });
       if (isMounted.current) {
@@ -256,11 +256,11 @@ const Users = () => {
       
       if (editingUser) {
         // ✅ FIXED: Removed '/api' prefix
-        await api.put(`/users/${editingUser.user_id}`, submitData);
+        await api.put(`/api/users/${editingUser.user_id}`, submitData);
         showMessage('✅ User updated successfully!');
       } else {
         // ✅ FIXED: Removed '/api' prefix
-        await api.post('/users', submitData);
+        await api.post('/api/users', submitData);
         showMessage('✅ User created successfully!');
       }
       
@@ -286,7 +286,7 @@ const Users = () => {
     
     try {
       // ✅ FIXED: Removed '/api' prefix
-      await api.delete(`/users/${id}`);
+      await api.delete(`/api/users/${id}`);
       showMessage('✅ User deleted successfully!');
       fetchUsers();
     } catch (error) {
@@ -307,7 +307,7 @@ const Users = () => {
     try {
       for (const id of selectedUsers) {
         // ✅ FIXED: Removed '/api' prefix
-        await api.delete(`/users/${id}`);
+        await api.delete(`/api/users/${id}`);
       }
       showMessage(`✅ ${selectedUsers.length} users deleted!`);
       setSelectedUsers([]);

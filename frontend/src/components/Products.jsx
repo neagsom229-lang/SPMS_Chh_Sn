@@ -100,8 +100,7 @@ const Products = () => {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('/products', { 
+      const res = await api.get('/api/products', { 
         params: { search: search || undefined } 
       });
       if (isMounted.current) {
@@ -208,12 +207,10 @@ const Products = () => {
       };
 
       if (editingProduct) {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.put(`/products/${editingProduct.PRODUCT_ID}`, payload);
+        await api.put(`/api/products/${editingProduct.PRODUCT_ID}`, payload);
         showMessage('✅ Product updated successfully!');
       } else {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.post('/products', payload);
+        await api.post('/api/products', payload);
         showMessage('✅ Product created successfully!');
       }
       
@@ -234,8 +231,7 @@ const Products = () => {
     if (!window.confirm('Are you sure you want to delete this product?')) return;
     
     try {
-      // ✅ FIXED: Removed '/api' prefix
-      await api.delete(`/products/${id}`);
+      await api.delete(`/api/products/${id}`);
       showMessage('✅ Product deleted successfully!');
       fetchProducts();
     } catch (error) {
@@ -251,8 +247,7 @@ const Products = () => {
 
     try {
       for (const id of selectedProducts) {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.delete(`/products/${id}`);
+        await api.delete(`/api/products/${id}`);
       }
       showMessage(`✅ ${selectedProducts.length} products deleted!`);
       setSelectedProducts([]);
@@ -437,7 +432,7 @@ const Products = () => {
         </div>
       )}
 
-      {/* ===== HEADER WITH STATS - 3D Tilt Effect ===== */}
+      {/* ===== HEADER WITH STATS ===== */}
       <div 
         ref={headerRef}
         className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden transition-all duration-300"
@@ -1054,70 +1049,6 @@ const Products = () => {
           </div>
         </div>
       )}
-
-      {/* ===== CSS ANIMATIONS ===== */}
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideIn {
-          from { opacity: 0; transform: translateX(-20px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        @keyframes slideInRight {
-          from { opacity: 0; transform: translateX(100px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
-        }
-        @keyframes pulse-slow {
-          0%, 100% { opacity: 0.2; transform: scale(1); }
-          50% { opacity: 0.4; transform: scale(1.1); }
-        }
-        @keyframes spin-slow {
-          0% { transform: translate(-50%, -50%) rotate(0deg); }
-          100% { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-
-        .animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; opacity: 0; }
-        .animate-slideIn { animation: slideIn 0.4s ease-out forwards; opacity: 0; }
-        .animate-slideInRight { animation: slideInRight 0.5s ease-out forwards; }
-        .animate-slideUp { animation: slideUp 0.4s ease-out forwards; opacity: 0; }
-        .animate-float { animation: float 3s ease-in-out infinite; }
-        .animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
-        .animate-spin-slow { animation: spin-slow 20s linear infinite; }
-        .animate-bounce { animation: bounce 1s ease-in-out infinite; }
-        .animation-delay-1000 { animation-delay: 1s; }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-          background: #c4c4c4;
-          border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: #a0a0a0;
-        }
-        .dark ::-webkit-scrollbar-thumb {
-          background: #4b5563;
-        }
-        .dark ::-webkit-scrollbar-thumb:hover {
-          background: #6b7280;
-        }
-      `}</style>
     </div>
   );
 };

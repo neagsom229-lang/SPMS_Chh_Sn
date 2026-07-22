@@ -129,10 +129,10 @@ const Dashboard = ({ user }) => {
     try {
       // ✅ FIXED: Removed '/api' prefix from all endpoints
       const [statsRes, ordersRes, lowStockRes, pendingRes] = await Promise.all([
-        api.get('/dashboard/stats').catch(() => ({ data: {} })),
-        api.get('/orders/recent').catch(() => ({ data: [] })),
-        api.get('/stock/low-stock').catch(() => ({ data: null })),
-        api.get('/orders/pending').catch(() => ({ data: null }))
+        api.get('/api/dashboard/stats').catch(() => ({ data: {} })),
+        api.get('/api/orders/recent').catch(() => ({ data: [] })),
+        api.get('/api/stock/low-stock').catch(() => ({ data: null })),
+        api.get('/api/orders/pending').catch(() => ({ data: null }))
       ]);
 
       setStats(prev => ({ 

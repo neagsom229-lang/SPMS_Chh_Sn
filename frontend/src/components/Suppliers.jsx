@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import axios from 'axios';
 import { 
   Search, Plus, Edit2, Trash2, Truck, X, Save, 
   Phone, Mail, MapPin, User, Building2, RefreshCw,
@@ -11,39 +10,7 @@ import {
 } from 'lucide-react';
 
 // ============================================
-// API CONFIGURATION - FIXED ✅
-// ============================================
-const API_BASE = import.meta.env?.VITE_API_URL || '';
-const api = axios.create({
-  baseURL: API_BASE,
-  timeout: 15000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add interceptors for debugging
-api.interceptors.request.use(
-  config => {
-    console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
-    return config;
-  },
-  error => Promise.reject(error)
-);
-
-api.interceptors.response.use(
-  response => {
-    console.log('📥 API Response:', response.status, response.config.url);
-    return response;
-  },
-  error => {
-    console.error('❌ API Error:', error.response?.status, error.response?.data || error.message);
-    return Promise.reject(error);
-  }
-);
-
-// ============================================
-// MAIN SUPPLIERS COMPONENT
+// STANDALONE SUPPLIERS COMPONENT
 // ============================================
 const Suppliers = () => {
   // ===== STATE =====
@@ -83,46 +50,102 @@ const Suppliers = () => {
     NOTES: ''
   });
 
-  // ===== REFS =====
-  const isMounted = useRef(true);
-  const searchTimeout = useRef(null);
+  // ===== INITIAL MOCK DATA =====
+  const getInitialData = () => {
+    return [
+      { 
+        SUP_ID: 'SUP001', 
+        SUP_NAME: 'TechPro Supplies', 
+        CONTACT_PERSON: 'John Smith', 
+        PHONE: '555-0101', 
+        EMAIL: 'john@techpro.com', 
+        ADDRESS: '123 Tech St, Silicon Valley', 
+        STATUS: 'Active', 
+        WEBSITE: 'techpro.com', 
+        TAX_ID: 'TAX-001',
+        NOTES: 'Main supplier for electronics'
+      },
+      { 
+        SUP_ID: 'SUP002', 
+        SUP_NAME: 'Global Electronics', 
+        CONTACT_PERSON: 'Sarah Johnson', 
+        PHONE: '555-0102', 
+        EMAIL: 'sarah@globalelec.com', 
+        ADDRESS: '456 Global Ave, NYC', 
+        STATUS: 'Active', 
+        WEBSITE: 'globalelec.com', 
+        TAX_ID: 'TAX-002',
+        NOTES: 'International electronics supplier'
+      },
+      { 
+        SUP_ID: 'SUP003', 
+        SUP_NAME: 'Prime Components', 
+        CONTACT_PERSON: 'Robert Wilson', 
+        PHONE: '555-0103', 
+        EMAIL: 'robert@primecomp.com', 
+        ADDRESS: '789 Prime Rd, Chicago', 
+        STATUS: 'Active', 
+        WEBSITE: 'primecomp.com', 
+        TAX_ID: 'TAX-003',
+        NOTES: 'High-quality components'
+      },
+      { 
+        SUP_ID: 'SUP004', 
+        SUP_NAME: 'Quality Parts Co', 
+        CONTACT_PERSON: 'Mary Brown', 
+        PHONE: '555-0104', 
+        EMAIL: 'mary@qualityparts.com', 
+        ADDRESS: '321 Quality Ln, LA', 
+        STATUS: 'Inactive', 
+        WEBSITE: 'qualityparts.com', 
+        TAX_ID: 'TAX-004',
+        NOTES: ''
+      },
+      { 
+        SUP_ID: 'SUP005', 
+        SUP_NAME: 'Industrial Solutions', 
+        CONTACT_PERSON: 'James Davis', 
+        PHONE: '', 
+        EMAIL: '', 
+        ADDRESS: '111 Industrial Pkwy, Dallas', 
+        STATUS: 'Active', 
+        WEBSITE: '', 
+        TAX_ID: '',
+        NOTES: ''
+      },
+    ];
+  };
 
-  // ===== FETCH SUPPLIERS - FIXED ✅ =====
-  const fetchSuppliers = useCallback(async () => {
-    setLoading(true);
-    try {
-      // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('/suppliers', { 
-        params: { search: search || undefined } 
-      });
-      
-      if (isMounted.current) {
-        const data = res.data || [];
-        setSuppliers(data);
-        calculateStats(data);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching suppliers:', error);
-      if (isMounted.current) {
-        showMessage('❌ Failed to load suppliers', 'error');
-        // Fallback data
-        const fallbackData = [
-          { SUP_ID: 'SUP001', SUP_NAME: 'TechPro Supplies', CONTACT_PERSON: 'John Smith', PHONE: '555-0101', EMAIL: 'john@techpro.com', ADDRESS: '123 Tech St, Silicon Valley', STATUS: 'Active', WEBSITE: 'techpro.com', TAX_ID: 'TAX-001' },
-          { SUP_ID: 'SUP002', SUP_NAME: 'Global Electronics', CONTACT_PERSON: 'Sarah Johnson', PHONE: '555-0102', EMAIL: 'sarah@globalelec.com', ADDRESS: '456 Global Ave, NYC', STATUS: 'Active', WEBSITE: 'globalelec.com', TAX_ID: 'TAX-002' },
-          { SUP_ID: 'SUP003', SUP_NAME: 'Prime Components', CONTACT_PERSON: 'Robert Wilson', PHONE: '555-0103', EMAIL: 'robert@primecomp.com', ADDRESS: '789 Prime Rd, Chicago', STATUS: 'Active', WEBSITE: 'primecomp.com', TAX_ID: 'TAX-003' },
-          { SUP_ID: 'SUP004', SUP_NAME: 'Quality Parts Co', CONTACT_PERSON: 'Mary Brown', PHONE: '555-0104', EMAIL: 'mary@qualityparts.com', ADDRESS: '321 Quality Ln, LA', STATUS: 'Inactive', WEBSITE: 'qualityparts.com', TAX_ID: 'TAX-004' },
-          { SUP_ID: 'SUP005', SUP_NAME: 'Industrial Solutions', CONTACT_PERSON: 'James Davis', PHONE: '', EMAIL: '', ADDRESS: '111 Industrial Pkwy, Dallas', STATUS: 'Active', WEBSITE: '', TAX_ID: '' },
-        ];
-        setSuppliers(fallbackData);
-        calculateStats(fallbackData);
-      }
-    } finally {
-      if (isMounted.current) {
-        setLoading(false);
-        setIsRefreshing(false);
+  // ===== LOAD DATA FROM LOCALSTORAGE OR USE INITIAL =====
+  useEffect(() => {
+    const savedData = localStorage.getItem('spms_suppliers');
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        if (parsed && parsed.length > 0) {
+          setSuppliers(parsed);
+          calculateStats(parsed);
+          setLoading(false);
+          return;
+        }
+      } catch (e) {
+        console.error('Error loading saved suppliers:', e);
       }
     }
-  }, [search]);
+    // No saved data, use initial mock data
+    const initialData = getInitialData();
+    setSuppliers(initialData);
+    calculateStats(initialData);
+    localStorage.setItem('spms_suppliers', JSON.stringify(initialData));
+    setLoading(false);
+  }, []);
+
+  // ===== SAVE TO LOCALSTORAGE WHENEVER SUPPLIERS CHANGE =====
+  useEffect(() => {
+    if (suppliers.length > 0) {
+      localStorage.setItem('spms_suppliers', JSON.stringify(suppliers));
+    }
+  }, [suppliers]);
 
   // ===== CALCULATE STATS =====
   const calculateStats = useCallback((data) => {
@@ -143,36 +166,16 @@ const Suppliers = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // ===== INITIAL LOAD =====
-  useEffect(() => {
-    isMounted.current = true;
-    fetchSuppliers();
+  // ===== GENERATE NEW ID =====
+  const generateId = useCallback(() => {
+    const maxId = suppliers.reduce((max, s) => {
+      const num = parseInt(s.SUP_ID.replace('SUP', ''));
+      return num > max ? num : max;
+    }, 0);
+    return `SUP${String(maxId + 1).padStart(3, '0')}`;
+  }, [suppliers]);
 
-    return () => {
-      isMounted.current = false;
-      if (searchTimeout.current) {
-        clearTimeout(searchTimeout.current);
-      }
-    };
-  }, [fetchSuppliers]);
-
-  // ===== SEARCH DEBOUNCE =====
-  useEffect(() => {
-    if (searchTimeout.current) {
-      clearTimeout(searchTimeout.current);
-    }
-    searchTimeout.current = setTimeout(() => {
-      fetchSuppliers();
-    }, 500);
-
-    return () => {
-      if (searchTimeout.current) {
-        clearTimeout(searchTimeout.current);
-      }
-    };
-  }, [search, fetchSuppliers]);
-
-  // ===== HANDLE SUBMIT - FIXED ✅ =====
+  // ===== HANDLE SUBMIT =====
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -184,66 +187,71 @@ const Suppliers = () => {
     }
 
     try {
-      const payload = {
-        ...formData,
-        STATUS: formData.STATUS || 'Active'
+      const newSupplier = {
+        SUP_ID: editingSupplier ? editingSupplier.SUP_ID : generateId(),
+        SUP_NAME: formData.SUP_NAME.trim(),
+        CONTACT_PERSON: formData.CONTACT_PERSON?.trim() || '',
+        PHONE: formData.PHONE?.trim() || '',
+        EMAIL: formData.EMAIL?.trim() || '',
+        ADDRESS: formData.ADDRESS?.trim() || '',
+        STATUS: formData.STATUS || 'Active',
+        WEBSITE: formData.WEBSITE?.trim() || '',
+        TAX_ID: formData.TAX_ID?.trim() || '',
+        NOTES: formData.NOTES?.trim() || ''
       };
 
       if (editingSupplier) {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.put(`/suppliers/${editingSupplier.SUP_ID}`, payload);
+        // Update existing
+        setSuppliers(prev => prev.map(s => 
+          s.SUP_ID === editingSupplier.SUP_ID ? newSupplier : s
+        ));
         showMessage('✅ Supplier updated successfully!');
       } else {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.post('/suppliers', payload);
+        // Add new
+        setSuppliers(prev => [...prev, newSupplier]);
         showMessage('✅ Supplier created successfully!');
       }
       
       setShowModal(false);
       setEditingSupplier(null);
       resetForm();
-      fetchSuppliers();
+      calculateStats(suppliers);
     } catch (error) {
-      console.error('Submit error:', error.response?.data || error.message);
-      showMessage(`❌ ${error.response?.data?.error || 'Failed to save supplier'}`, 'error');
+      console.error('Submit error:', error);
+      showMessage('❌ Failed to save supplier', 'error');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // ===== HANDLE DELETE - FIXED ✅ =====
-  const handleDelete = useCallback(async (id) => {
+  // ===== HANDLE DELETE =====
+  const handleDelete = useCallback((id) => {
     if (!window.confirm('Are you sure you want to delete this supplier?')) return;
     
     try {
-      // ✅ FIXED: Removed '/api' prefix
-      await api.delete(`/suppliers/${id}`);
+      setSuppliers(prev => prev.filter(s => s.SUP_ID !== id));
       showMessage('✅ Supplier deleted successfully!');
-      fetchSuppliers();
+      setSelectedSuppliers(prev => prev.filter(s => s !== id));
     } catch (error) {
       console.error('Delete error:', error);
       showMessage('❌ Failed to delete supplier', 'error');
     }
-  }, [fetchSuppliers, showMessage]);
+  }, [showMessage]);
 
-  // ===== BULK DELETE - FIXED ✅ =====
-  const handleBulkDelete = useCallback(async () => {
+  // ===== BULK DELETE =====
+  const handleBulkDelete = useCallback(() => {
     if (selectedSuppliers.length === 0) return;
     if (!window.confirm(`Delete ${selectedSuppliers.length} selected suppliers?`)) return;
 
     try {
-      for (const id of selectedSuppliers) {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.delete(`/suppliers/${id}`);
-      }
+      setSuppliers(prev => prev.filter(s => !selectedSuppliers.includes(s.SUP_ID)));
       showMessage(`✅ ${selectedSuppliers.length} suppliers deleted!`);
       setSelectedSuppliers([]);
-      fetchSuppliers();
     } catch (error) {
       console.error('Bulk delete error:', error);
       showMessage('❌ Failed to delete some suppliers', 'error');
     }
-  }, [selectedSuppliers, fetchSuppliers, showMessage]);
+  }, [selectedSuppliers, showMessage]);
 
   // ===== RESET FORM =====
   const resetForm = useCallback(() => {
@@ -287,6 +295,12 @@ const Suppliers = () => {
   const viewSupplierDetail = useCallback((supplier) => {
     setSelectedSupplierDetail(supplier);
     setShowDetailModal(true);
+  }, []);
+
+  // ===== CLOSE DETAIL MODAL =====
+  const closeDetailModal = useCallback(() => {
+    setShowDetailModal(false);
+    setSelectedSupplierDetail(null);
   }, []);
 
   // ===== TOGGLE SELECT =====
@@ -351,15 +365,31 @@ const Suppliers = () => {
   }, [suppliers, showMessage]);
 
   // ===== REFRESH =====
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    await fetchSuppliers();
-  }, [fetchSuppliers]);
+    setTimeout(() => {
+      setIsRefreshing(false);
+      showMessage('✅ Refreshed!', 'success');
+    }, 800);
+  }, [showMessage]);
 
   // ===== FILTERED & SORTED SUPPLIERS =====
   const filteredSuppliers = useMemo(() => {
     let result = [...suppliers];
 
+    // Search filter
+    if (search) {
+      const lowerSearch = search.toLowerCase();
+      result = result.filter(s => 
+        (s.SUP_NAME || '').toLowerCase().includes(lowerSearch) ||
+        (s.CONTACT_PERSON || '').toLowerCase().includes(lowerSearch) ||
+        (s.PHONE || '').toLowerCase().includes(lowerSearch) ||
+        (s.EMAIL || '').toLowerCase().includes(lowerSearch) ||
+        (s.ADDRESS || '').toLowerCase().includes(lowerSearch)
+      );
+    }
+
+    // Status filter
     if (filterStatus === 'active') {
       result = result.filter(s => (s.STATUS || 'Active') === 'Active');
     } else if (filterStatus === 'inactive') {
@@ -370,6 +400,7 @@ const Suppliers = () => {
       result = result.filter(s => s.EMAIL && s.EMAIL.trim() !== '');
     }
 
+    // Sort
     result.sort((a, b) => {
       let comparison = 0;
       const aVal = a[sortBy] || '';
@@ -387,7 +418,7 @@ const Suppliers = () => {
     });
 
     return result;
-  }, [suppliers, filterStatus, sortBy, sortOrder]);
+  }, [suppliers, search, filterStatus, sortBy, sortOrder]);
 
   // ===== GET STATUS BADGE =====
   const getStatusBadge = (status) => {
@@ -450,7 +481,6 @@ const Suppliers = () => {
     );
   }
 
-  // ===== RENDER =====
   return (
     <div className="space-y-4 p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen">
       
@@ -885,9 +915,273 @@ const Suppliers = () => {
         </p>
       </div>
 
-      {/* ===== REST OF COMPONENT (Modal, Detail Modal, CSS) ===== */}
-      {/* The rest of your component remains the same */}
-      
+      {/* ===== DETAIL MODAL ===== */}
+      {showDetailModal && selectedSupplierDetail && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
+                <Truck className="w-5 h-5 text-indigo-600" />
+                Supplier Details
+              </h2>
+              <button 
+                onClick={closeDetailModal}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-300 hover:rotate-90"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-4 pb-4 border-b border-gray-100 dark:border-gray-700">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl ${getAvatarColor(selectedSupplierDetail.SUP_NAME || 'Unknown')}`}>
+                  {getInitials(selectedSupplierDetail.SUP_NAME || 'Unknown')}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold dark:text-white">{selectedSupplierDetail.SUP_NAME || 'Unknown'}</h3>
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(selectedSupplierDetail.STATUS || 'Active')}`}>
+                    {selectedSupplierDetail.STATUS || 'Active'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {selectedSupplierDetail.CONTACT_PERSON && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <User className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-600 dark:text-gray-300">{selectedSupplierDetail.CONTACT_PERSON}</span>
+                  </div>
+                )}
+                {selectedSupplierDetail.PHONE && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Phone className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-600 dark:text-gray-300">{selectedSupplierDetail.PHONE}</span>
+                  </div>
+                )}
+                {selectedSupplierDetail.EMAIL && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Mail className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-600 dark:text-gray-300">{selectedSupplierDetail.EMAIL}</span>
+                  </div>
+                )}
+                {selectedSupplierDetail.ADDRESS && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <MapPin className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-600 dark:text-gray-300">{selectedSupplierDetail.ADDRESS}</span>
+                  </div>
+                )}
+                {selectedSupplierDetail.WEBSITE && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <Globe className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-600 dark:text-gray-300">{selectedSupplierDetail.WEBSITE}</span>
+                  </div>
+                )}
+                {selectedSupplierDetail.TAX_ID && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <FileText className="w-4 h-4 text-gray-400" />
+                    <span className="text-gray-600 dark:text-gray-300">Tax ID: {selectedSupplierDetail.TAX_ID}</span>
+                  </div>
+                )}
+                {selectedSupplierDetail.NOTES && (
+                  <div className="flex items-start gap-3 text-sm">
+                    <FileText className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                    <span className="text-gray-600 dark:text-gray-300">{selectedSupplierDetail.NOTES}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex gap-3">
+                <button
+                  onClick={() => {
+                    closeDetailModal();
+                    openEditModal(selectedSupplierDetail);
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium"
+                >
+                  <Edit2 className="w-4 h-4 inline mr-2" />
+                  Edit Supplier
+                </button>
+                <button
+                  onClick={() => {
+                    closeDetailModal();
+                    handleDelete(selectedSupplierDetail.SUP_ID);
+                  }}
+                  className="px-4 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition font-medium"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== ADD/EDIT MODAL ===== */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp">
+            <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
+                <Truck className="w-5 h-5 text-indigo-600" />
+                {editingSupplier ? 'Edit Supplier' : 'Add New Supplier'}
+              </h2>
+              <button 
+                onClick={() => setShowModal(false)} 
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-300 hover:rotate-90"
+                disabled={submitting}
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6">
+              <div className="space-y-4">
+                <div className="group">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
+                    Supplier Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.SUP_NAME}
+                    onChange={(e) => setFormData({...formData, SUP_NAME: e.target.value})}
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    placeholder="Enter supplier name"
+                    disabled={submitting}
+                  />
+                </div>
+
+                <div className="group">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Contact Person</label>
+                  <input
+                    type="text"
+                    value={formData.CONTACT_PERSON}
+                    onChange={(e) => setFormData({...formData, CONTACT_PERSON: e.target.value})}
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    placeholder="Enter contact person name"
+                    disabled={submitting}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="group">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Phone</label>
+                    <input
+                      type="text"
+                      value={formData.PHONE}
+                      onChange={(e) => setFormData({...formData, PHONE: e.target.value})}
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                      placeholder="Enter phone number"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="group">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
+                    <input
+                      type="email"
+                      value={formData.EMAIL}
+                      onChange={(e) => setFormData({...formData, EMAIL: e.target.value})}
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                      placeholder="Enter email address"
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="group">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Address</label>
+                  <input
+                    type="text"
+                    value={formData.ADDRESS}
+                    onChange={(e) => setFormData({...formData, ADDRESS: e.target.value})}
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    placeholder="Enter address"
+                    disabled={submitting}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="group">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Website</label>
+                    <input
+                      type="text"
+                      value={formData.WEBSITE}
+                      onChange={(e) => setFormData({...formData, WEBSITE: e.target.value})}
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                      placeholder="Enter website"
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="group">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Tax ID</label>
+                    <input
+                      type="text"
+                      value={formData.TAX_ID}
+                      onChange={(e) => setFormData({...formData, TAX_ID: e.target.value})}
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                      placeholder="Enter tax ID"
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="group">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Notes</label>
+                  <textarea
+                    value={formData.NOTES}
+                    onChange={(e) => setFormData({...formData, NOTES: e.target.value})}
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    placeholder="Enter notes"
+                    rows="3"
+                    disabled={submitting}
+                  />
+                </div>
+
+                <div className="group">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Status</label>
+                  <select
+                    value={formData.STATUS}
+                    onChange={(e) => setFormData({...formData, STATUS: e.target.value})}
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    disabled={submitting}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button 
+                  type="button" 
+                  onClick={() => setShowModal(false)} 
+                  className="px-6 py-2.5 border-2 border-gray-200 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-300 dark:text-white font-medium disabled:opacity-50"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 hover:scale-105 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      {editingSupplier ? 'Update Supplier' : 'Save Supplier'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

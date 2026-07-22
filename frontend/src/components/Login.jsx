@@ -128,7 +128,7 @@ const Login = ({ setUser }) => {
 
     try {
       // ✅ FIXED: Removed '/api' prefix - just use '/auth/login'
-      const response = await api.post('/auth/login', { username, password });
+      const response = await api.post('/api/auth/login', { username, password });
       console.log('✅ Login response:', response.data);
       
       if (rememberMe) {

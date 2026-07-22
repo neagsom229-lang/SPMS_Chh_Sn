@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-// Remove axios import - we'll use mock data only
-
 import { 
   Shield, Plus, Edit2, Trash2, X, Save, RefreshCw, Wrench,
   Search, Filter, Download, Eye, CheckCircle, Clock,
@@ -39,6 +37,10 @@ const generateMockData = () => {
   const services = [];
   const statuses = ['Active', 'Active', 'Active', 'Expired', 'Active'];
   const serviceStatuses = ['Pending', 'In Progress', 'Completed', 'Pending', 'In Progress'];
+  const issueDescriptions = [
+    'Screen cracked', 'Battery issue', 'Software update', 'Hardware failure', 
+    'Water damage', 'Charging issue', 'Display problem', 'Performance slow'
+  ];
 
   for (let i = 0; i < 10; i++) {
     const customer = customers[i % customers.length];
@@ -67,7 +69,7 @@ const generateMockData = () => {
         CustomerID: customer.CUS_ID,
         ProductID: product.PRODUCT_ID,
         SerialNumber: `SN-${String(i + 1).padStart(4, '0')}`,
-        IssueDescription: ['Screen cracked', 'Battery issue', 'Software update', 'Hardware failure', 'Water damage', 'Charging issue', 'Display problem', 'Performance slow'][i % 8],
+        IssueDescription: issueDescriptions[i % issueDescriptions.length],
         ServiceType: ['Repair', 'Maintenance'][i % 2],
         Status: serviceStatuses[i % serviceStatuses.length],
         ReceivedDate: formatDate(new Date(now.getFullYear(), now.getMonth() - i % 6, 1 + i % 28)),
@@ -137,27 +139,52 @@ const Warranty = () => {
   const isMounted = useRef(true);
   const searchTimeout = useRef(null);
 
-  // ===== LOAD DATA =====
+  // ===== LOAD DATA FROM LOCALSTORAGE =====
   const loadData = useCallback(() => {
     setLoading(true);
     try {
-      // Generate mock data
-      const mockData = generateMockData();
+      // Try to load from localStorage first
+      const savedData = localStorage.getItem('spms_warranty_data');
       
-      if (isMounted.current) {
-        setWarranties(mockData.warranties);
-        setServices(mockData.services);
-        setCustomers(mockData.customers);
-        setProducts(mockData.products);
-        
-        calculateWarrantyStats(mockData.warranties);
-        calculateServiceStats(mockData.services);
+      if (savedData) {
+        try {
+          const parsed = JSON.parse(savedData);
+          if (parsed && parsed.warranties && parsed.services) {
+            setWarranties(parsed.warranties);
+            setServices(parsed.services);
+            setCustomers(parsed.customers || generateMockData().customers);
+            setProducts(parsed.products || generateMockData().products);
+            calculateWarrantyStats(parsed.warranties);
+            calculateServiceStats(parsed.services);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error('Error parsing saved data:', e);
+        }
       }
+
+      // Generate new mock data
+      const mockData = generateMockData();
+      setWarranties(mockData.warranties);
+      setServices(mockData.services);
+      setCustomers(mockData.customers);
+      setProducts(mockData.products);
+      
+      calculateWarrantyStats(mockData.warranties);
+      calculateServiceStats(mockData.services);
+      
+      // Save to localStorage
+      localStorage.setItem('spms_warranty_data', JSON.stringify({
+        warranties: mockData.warranties,
+        services: mockData.services,
+        customers: mockData.customers,
+        products: mockData.products
+      }));
     } catch (error) {
       console.error('Error loading data:', error);
       if (isMounted.current) {
         showMessage('❌ Failed to load data', 'error');
-        // Set empty data as fallback
         setWarranties([]);
         setServices([]);
         setCustomers([]);
@@ -172,6 +199,27 @@ const Warranty = () => {
       }
     }
   }, []);
+
+  // ===== SAVE TO LOCALSTORAGE =====
+  const saveToLocalStorage = useCallback(() => {
+    try {
+      localStorage.setItem('spms_warranty_data', JSON.stringify({
+        warranties,
+        services,
+        customers,
+        products
+      }));
+    } catch (e) {
+      console.error('Error saving to localStorage:', e);
+    }
+  }, [warranties, services, customers, products]);
+
+  // ===== SAVE WHENEVER DATA CHANGES =====
+  useEffect(() => {
+    if (!loading && warranties.length > 0) {
+      saveToLocalStorage();
+    }
+  }, [warranties, services, customers, products, loading, saveToLocalStorage]);
 
   // ===== CALCULATE STATS =====
   const calculateWarrantyStats = useCallback((data) => {
@@ -312,10 +360,13 @@ const Warranty = () => {
     }
 
     if (filterStatus !== 'all') {
-      result = result.filter(s => {
-        const status = (s.Status || '').toLowerCase().replace(' ', '_');
-        return status === filterStatus.toLowerCase().replace(' ', '_');
-      });
+      const statusMap = {
+        'pending': 'Pending',
+        'in_progress': 'In Progress',
+        'completed': 'Completed'
+      };
+      const targetStatus = statusMap[filterStatus] || filterStatus;
+      result = result.filter(s => s.Status === targetStatus);
     }
 
     if (filterType !== 'all') {
@@ -495,13 +546,17 @@ const Warranty = () => {
     if (!window.confirm('Are you sure you want to delete this item?')) return;
 
     if (activeTab === 'warranty') {
-      setWarranties(prev => prev.filter(w => w.WarrantyID !== id));
+      const updatedWarranties = warranties.filter(w => w.WarrantyID !== id);
+      setWarranties(updatedWarranties);
+      calculateWarrantyStats(updatedWarranties);
       showMessage('✅ Warranty deleted successfully!');
     } else {
-      setServices(prev => prev.filter(s => s.ServiceID !== id));
+      const updatedServices = services.filter(s => s.ServiceID !== id);
+      setServices(updatedServices);
+      calculateServiceStats(updatedServices);
       showMessage('✅ Service deleted successfully!');
     }
-  }, [activeTab, showMessage]);
+  }, [activeTab, warranties, services, calculateWarrantyStats, calculateServiceStats, showMessage]);
 
   // ===== BULK DELETE =====
   const handleBulkDelete = useCallback(() => {
@@ -509,14 +564,18 @@ const Warranty = () => {
     if (!window.confirm(`Delete ${selectedItems.length} selected items?`)) return;
 
     if (activeTab === 'warranty') {
-      setWarranties(prev => prev.filter(w => !selectedItems.includes(w.WarrantyID)));
+      const updatedWarranties = warranties.filter(w => !selectedItems.includes(w.WarrantyID));
+      setWarranties(updatedWarranties);
+      calculateWarrantyStats(updatedWarranties);
     } else {
-      setServices(prev => prev.filter(s => !selectedItems.includes(s.ServiceID)));
+      const updatedServices = services.filter(s => !selectedItems.includes(s.ServiceID));
+      setServices(updatedServices);
+      calculateServiceStats(updatedServices);
     }
     
     showMessage(`✅ ${selectedItems.length} items deleted!`);
     setSelectedItems([]);
-  }, [selectedItems, activeTab, showMessage]);
+  }, [selectedItems, activeTab, warranties, services, calculateWarrantyStats, calculateServiceStats, showMessage]);
 
   // ===== RESET FORM =====
   const resetForm = useCallback(() => {
@@ -577,8 +636,17 @@ const Warranty = () => {
       };
 
       if (activeTab === 'warranty') {
+        // Validate dates
+        const startDate = new Date(formData.start_date);
+        const endDate = new Date(formData.end_date);
+        if (endDate <= startDate) {
+          showMessage('❌ End date must be after start date', 'error');
+          setSubmitting(false);
+          return;
+        }
+
         const newWarranty = {
-          WarrantyID: warranties.length + 1,
+          WarrantyID: editingItem ? editingItem.WarrantyID : warranties.length + 1,
           CustomerID: newItem.CustomerID,
           ProductID: newItem.ProductID,
           SerialNumber: newItem.SerialNumber,
@@ -589,18 +657,22 @@ const Warranty = () => {
           notes: ''
         };
         
+        let updatedWarranties;
         if (editingItem) {
-          setWarranties(prev => prev.map(w => 
+          updatedWarranties = warranties.map(w => 
             w.WarrantyID === editingItem.WarrantyID ? { ...newWarranty, WarrantyID: w.WarrantyID } : w
-          ));
+          );
+          setWarranties(updatedWarranties);
           showMessage('✅ Warranty updated successfully!');
         } else {
-          setWarranties(prev => [...prev, newWarranty]);
+          updatedWarranties = [...warranties, newWarranty];
+          setWarranties(updatedWarranties);
           showMessage('✅ New warranty added successfully!');
         }
+        calculateWarrantyStats(updatedWarranties);
       } else {
         const newService = {
-          ServiceID: services.length + 1,
+          ServiceID: editingItem ? editingItem.ServiceID : services.length + 1,
           CustomerID: newItem.CustomerID,
           ProductID: newItem.ProductID,
           SerialNumber: newItem.SerialNumber,
@@ -611,27 +683,24 @@ const Warranty = () => {
           notes: ''
         };
         
+        let updatedServices;
         if (editingItem) {
-          setServices(prev => prev.map(s => 
+          updatedServices = services.map(s => 
             s.ServiceID === editingItem.ServiceID ? { ...newService, ServiceID: s.ServiceID } : s
-          ));
+          );
+          setServices(updatedServices);
           showMessage('✅ Service updated successfully!');
         } else {
-          setServices(prev => [...prev, newService]);
+          updatedServices = [...services, newService];
+          setServices(updatedServices);
           showMessage('✅ New service added successfully!');
         }
+        calculateServiceStats(updatedServices);
       }
 
       setShowModal(false);
       setEditingItem(null);
       resetForm();
-      
-      // Recalculate stats
-      if (activeTab === 'warranty') {
-        calculateWarrantyStats(warranties);
-      } else {
-        calculateServiceStats(services);
-      }
     } catch (error) {
       console.error('Submit error:', error);
       showMessage('❌ Failed to save', 'error');
@@ -671,10 +740,8 @@ const Warranty = () => {
   // ===== REFRESH =====
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    setTimeout(() => {
-      loadData();
-      showMessage('✅ Data refreshed!');
-    }, 500);
+    loadData();
+    showMessage('✅ Data refreshed!');
   }, [loadData, showMessage]);
 
   // ===== LOADING =====
@@ -708,7 +775,9 @@ const Warranty = () => {
             ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' 
             : messageType === 'error'
             ? 'bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
-            : 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+            : messageType === 'warning'
+            ? 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+            : 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
         }`}>
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 mt-0.5">

@@ -408,7 +408,6 @@ app.get("/api/products/:id", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // ============================================
 // CREATE PRODUCT - FULLY FIXED ✅
 // ============================================
@@ -437,14 +436,16 @@ app.post("/api/products", async (req, res) => {
   }
 
   try {
-    // ✅ FIXED: Handle empty table case properly
-    const maxIdResult = await db.query("SELECT MAX(PRODUCT_ID) as maxId FROM TBL_PRODUCTS");
-    console.log("📊 Max ID result:", maxIdResult.rows);
+    // ✅ FIXED: Get the max PRODUCT_ID correctly
+    const maxIdResult = await db.query(
+      "SELECT MAX(PRODUCT_ID) as maxId FROM TBL_PRODUCTS"
+    );
+    console.log("📊 Max ID result:", maxIdResult.rows[0]);
     
     let nextNumber = 1;
-    // ✅ Check if rows exist and maxId is not null
-    if (maxIdResult.rows && maxIdResult.rows.length > 0 && maxIdResult.rows[0]?.maxId) {
-      const currentId = maxIdResult.rows[0].maxId;
+    // ✅ Check if maxId exists and is not null
+    if (maxIdResult.rows && maxIdResult.rows.length > 0 && maxIdResult.rows[0]?.maxid) {
+      const currentId = maxIdResult.rows[0].maxid;
       const numPart = parseInt(String(currentId).replace(/[^0-9]/g, ""));
       if (!isNaN(numPart)) nextNumber = numPart + 1;
     }

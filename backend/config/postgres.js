@@ -10,7 +10,7 @@ const pool = new Pool({
     rejectUnauthorized: false,
     require: true
   },
-  connectionTimeoutMillis: 30000, // Increase timeout
+  connectionTimeoutMillis: 30000,
   family: 4,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,

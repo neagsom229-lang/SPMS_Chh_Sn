@@ -6,7 +6,7 @@ import {
   Clock, CheckCircle, AlertCircle,
   Eye, Globe, Shield,
   Download, AlertTriangle,
-  File, Loader2, Star, Award  // ✅ File (not FileText)
+  ClipboardList, Loader2, Star, Award
 } from 'lucide-react';
 
 // ============================================
@@ -978,13 +978,13 @@ const Suppliers = () => {
                 )}
                 {selectedSupplierDetail.TAX_ID && (
                   <div className="flex items-center gap-3 text-sm">
-                    <File className="w-4 h-4 text-gray-400" />
+                    <ClipboardList className="w-4 h-4 text-gray-400" />
                     <span className="text-gray-600 dark:text-gray-300">Tax ID: {selectedSupplierDetail.TAX_ID}</span>
                   </div>
                 )}
                 {selectedSupplierDetail.NOTES && (
                   <div className="flex items-start gap-3 text-sm">
-                    <File className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                    <ClipboardList className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
                     <span className="text-gray-600 dark:text-gray-300">{selectedSupplierDetail.NOTES}</span>
                   </div>
                 )}

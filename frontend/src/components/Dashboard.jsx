@@ -4,7 +4,7 @@ import axios from 'axios';
 import {
   Users, Package, ShoppingCart, DollarSign,
   AlertCircle, TrendingUp, TrendingDown,
-  Plus, FileText, Clock, Calendar,
+  Plus, ClipboardList, Clock, Calendar,
   ArrowRight, BarChart3, PieChart,
   ChevronRight, Bell, Search, Filter,
   MoreVertical, Eye, Edit, Trash2,
@@ -856,7 +856,7 @@ const Dashboard = ({ user }) => {
           { icon: Plus, label: 'New Order', color: 'indigo', delay: 0, onClick: handleNewOrder },
           { icon: Users, label: 'Add Customer', color: 'emerald', delay: 0.1, onClick: handleAddCustomer },
           { icon: Package, label: 'Add Product', color: 'purple', delay: 0.2, onClick: handleAddProduct },
-          { icon: FileText, label: 'Generate Report', color: 'amber', delay: 0.3, onClick: handleGenerateReport }
+          { icon: ClipboardList, label: 'Generate Report', color: 'amber', delay: 0.3, onClick: handleGenerateReport }
         ].map((action, index) => (
           <button
             key={index}

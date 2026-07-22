@@ -6,7 +6,7 @@ import {
   ArrowUp, ArrowDown, Grid3x3, List,
   User, Package, Phone, Mail, MapPin,
   Award, Star, Zap, Activity, TrendingUp,
-  AlertTriangle, ChevronRight, FileText,
+  AlertTriangle, ChevronRight, ClipboardList,
   Printer, Home, Briefcase, Users as UsersIcon
 } from 'lucide-react';
 
@@ -1148,7 +1148,7 @@ const Warranty = () => {
                     {/* Details */}
                     <div className="space-y-1.5 mb-3">
                       <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
-                        <FileText className="w-3.5 h-3.5 text-gray-400" />
+                        <ClipboardList className="w-3.5 h-3.5 text-gray-400" />
                         {item.SerialNumber || 'N/A'}
                       </p>
                       {activeTab === 'warranty' ? (
@@ -1519,7 +1519,7 @@ const Warranty = () => {
                 {/* Serial Number */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
-                    <FileText className="w-4 h-4" />
+                    <ClipboardList className="w-4 h-4" />
                     Serial Number
                   </label>
                   <input

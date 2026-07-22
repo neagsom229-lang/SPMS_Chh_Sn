@@ -8,7 +8,7 @@ import {
   BarChart3, Zap, Award, Star, Clock, AlertTriangle,
   ChevronRight, Eye, Copy, Tag, Layers, Box,
   Sparkles, Gift, Shield,
-  FileText
+  ClipboardList
 } from 'lucide-react';
 
 // ============================================

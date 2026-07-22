@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { 
-  FileText, Download, Printer, RefreshCw, 
+  ClipboardList, Download, Printer, RefreshCw, 
   AlertCircle, CheckCircle, Loader2, Database,
   TrendingUp, Package, Users, ShoppingBag,
   Calendar, Filter, ChevronDown, X, Eye,  // ← X is here ✅
@@ -489,7 +489,7 @@ const Reports = () => {
 
   // ===== GET REPORT ICON =====
   const getReportIcon = useCallback(() => {
-    return reportOptions.find(r => r.value === reportType)?.icon || FileText;
+    return reportOptions.find(r => r.value === reportType)?.icon || ClipboardList;
   }, [reportType]);
 
   // ===== GET STAT ICON =====
@@ -592,7 +592,7 @@ const Reports = () => {
                 </>
               ) : (
                 <>
-                  <FileText className="w-8 h-8" />
+                  <ClipboardList className="w-8 h-8" />
                   Reports Dashboard
                 </>
               )}
@@ -667,7 +667,7 @@ const Reports = () => {
                 {isRefreshing || isGenerating ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <FileText className="w-4 h-4" />
+                  <ClipboardList className="w-4 h-4" />
                 )}
                 {isRefreshing || isGenerating ? 'Generating...' : 'Generate'}
               </button>
@@ -743,7 +743,7 @@ const Reports = () => {
               </span>
               <span className="w-px h-4 bg-gray-300 dark:bg-gray-600"></span>
               <span className="flex items-center gap-1">
-                <FileText className="w-4 h-4" />
+                <ClipboardList className="w-4 h-4" />
                 <span className="font-medium text-gray-700 dark:text-gray-300">{getReportLabel()}</span>
               </span>
             </div>
@@ -873,7 +873,7 @@ const Reports = () => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-8 text-center">
           <div className="max-w-2xl mx-auto">
             <div className="w-24 h-24 mx-auto rounded-full bg-gradient-to-r from-indigo-100 to-purple-100 dark:from-indigo-900/30 dark:to-purple-900/30 flex items-center justify-center mb-6 animate-float">
-              <FileText className="w-12 h-12 text-indigo-600 dark:text-indigo-400" />
+              <ClipboardList className="w-12 h-12 text-indigo-600 dark:text-indigo-400" />
             </div>
             <h3 className="text-2xl font-bold text-gray-800 dark:text-white">Select a Report Type</h3>
             <p className="text-gray-500 dark:text-gray-400 mt-2">Choose a report from the options below and click Generate</p>
@@ -912,7 +912,7 @@ const Reports = () => {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-slideUp">
             <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
               <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-600" />
+                <ClipboardList className="w-5 h-5 text-indigo-600" />
                 Record Details
                 <span className="text-sm font-normal text-gray-400 ml-2">
                   {reportType && `• ${getReportLabel()}`}

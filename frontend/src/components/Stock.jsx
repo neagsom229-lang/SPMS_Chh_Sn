@@ -31,7 +31,7 @@ import {
   Grid3x3,
   List,
   ChevronRight,
-  FileText,
+  ClipboardList,
   AlertTriangle,
   ShoppingBag,
   Layers,

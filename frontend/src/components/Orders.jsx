@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { 
-  Plus, X, Save, Printer, Search, FileText, RefreshCw, 
+  Plus, X, Save, Printer, Search, ClipboardList, RefreshCw, 
   AlertCircle, CheckCircle, Loader2, Package, User, 
   ShoppingCart, Eye, Trash2, Calendar, List, 
   CreditCard, Wallet, Zap, Check, AlertTriangle,
@@ -814,7 +814,7 @@ const Orders = () => {
           <div className="flex flex-wrap justify-between items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
             <div>
               <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-600 animate-pulse" />
+                <ClipboardList className="w-5 h-5 text-indigo-600 animate-pulse" />
                 Order #{orderNo}
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">Create a new customer order</p>
@@ -1288,7 +1288,7 @@ const Orders = () => {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-slideUp">
             <div className="sticky top-0 bg-white dark:bg-gray-800 z-10 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
               <h2 className="text-xl font-bold dark:text-white flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-600" />
+                <ClipboardList className="w-5 h-5 text-indigo-600" />
                 Order Details
                 <span className="text-sm font-mono font-normal text-gray-400 ml-2">#{selectedOrder.order_no}</span>
               </h2>

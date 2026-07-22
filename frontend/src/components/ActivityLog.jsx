@@ -5,7 +5,7 @@ import {
   Clock, User, Eye, Trash2, Download, 
   AlertCircle, CheckCircle, Loader2,
   Calendar, ChevronRight, ArrowUp, ArrowDown,
-  Grid3x3, List, FileText, Shield, Zap,
+  Grid3x3, List, ClipboardList, Shield, Zap,
   Sparkles, Award, Star, Gift, Heart
 } from 'lucide-react';
 
@@ -910,7 +910,7 @@ const ActivityLog = () => {
                 </div>
                 {selectedLogDetail.table_name && (
                   <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                    <FileText className="w-4 h-4 text-purple-500" />
+                    <ClipboardList className="w-4 h-4 text-purple-500" />
                     <span className="dark:text-white">Table: <span className="font-medium">{selectedLogDetail.table_name}</span></span>
                   </div>
                 )}

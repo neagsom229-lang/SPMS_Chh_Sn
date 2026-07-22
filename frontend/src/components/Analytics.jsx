@@ -10,7 +10,7 @@ import {
   TrendingUp, TrendingDown, Calendar, DollarSign, ShoppingBag, Users,
   Filter, Download, RefreshCw, Eye, Clock, Award, Package,
   User, ChevronDown, Search, AlertCircle, CheckCircle, XCircle,
-  Database, AlertTriangle, Printer, FileText, FileSpreadsheet,
+  Database, AlertTriangle, Printer, ClipboardList, FileSpreadsheet,
   Zap, Activity, BarChart3, PieChart as PieChartIcon,
   Loader2, ChevronRight, Shield, File, Plus, Minus,
   Building, Phone, Mail, MapPin, Star, Target,
@@ -1645,7 +1645,7 @@ const Analytics = () => {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 hover:shadow-lg transition-shadow duration-300">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-600" />
+                <ClipboardList className="w-5 h-5 text-indigo-600" />
                 {reportType === 'monthlySales' && 'Monthly Sales Report'}
                 {reportType === 'productPerformance' && 'Product Performance Report'}
                 {reportType === 'customerAnalytics' && 'Customer Analytics Report'}

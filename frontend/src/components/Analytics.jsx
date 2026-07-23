@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
-
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -19,7 +18,7 @@ import {
   Globe, Heart, Coffee, Sun, Moon, Cloud,
   Move, ArrowRight, ArrowLeft, CornerDownRight,
   CircleDot, Square, Diamond, Hexagon, Octagon,
-  X, Box, Tag, Layers as LayersIcon
+  X, Box, Tag, Layers as LayersIcon  // ✅ Make sure X is here!
 } from 'lucide-react';
 
 // ============================================

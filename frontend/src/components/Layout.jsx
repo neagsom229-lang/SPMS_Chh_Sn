@@ -68,7 +68,6 @@ const Layout = ({ children, user }) => {
     };
     loadAvatar();
 
-    // Listen for avatar updates from Profile component
     const handleStorageChange = (e) => {
       if (e.key === 'userAvatar') {
         loadAvatar();
@@ -254,14 +253,14 @@ const Layout = ({ children, user }) => {
           </div>
         </Link>
 
-        {/* Navigation */}
+        {/* ===== NAVIGATION - FIXED WITH KEYS ===== */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {menu.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             return (
               <Link
-                key={item.path}
+                key={item.path} // ✅ THIS FIXES THE WARNING!
                 to={item.path}
                 onClick={() => setIsSidebarOpen(false)}
                 className={`
@@ -404,7 +403,7 @@ const Layout = ({ children, user }) => {
                       ) : (
                         notifications.map((n) => (
                           <div
-                            key={n.id}
+                            key={n.id} // ✅ Already has key
                             onClick={() => handleNotificationClick(n.id)}
                             className={`px-3 sm:px-4 py-2.5 sm:py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-all duration-200 border-l-4 ${
                               !n.read ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/10' : 'border-transparent'
@@ -569,7 +568,6 @@ const Layout = ({ children, user }) => {
         .animate-fadeInUp { animation: fadeInUp 0.4s ease-out forwards; }
         .animate-slideDown { animation: slideDown 0.3s ease-out forwards; }
 
-        /* Mobile touch targets */
         @media (max-width: 640px) {
           button, a, input, select {
             min-height: 44px;

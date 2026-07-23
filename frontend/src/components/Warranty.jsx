@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import axios from 'axios';
 import { 
   Shield, Plus, Edit2, Trash2, X, Save, RefreshCw, Wrench,
   Search, Filter, Download, Eye, CheckCircle, Clock,
@@ -7,30 +8,65 @@ import {
   User, Package, Phone, Mail, MapPin,
   Award, Star, Zap, Activity, TrendingUp,
   AlertTriangle, ChevronRight, ClipboardList,
-  Printer, Home, Briefcase, Users as UsersIcon
+  Printer, Home, Briefcase, Users as UsersIcon,
+  Key
 } from 'lucide-react';
 
 // ============================================
-// MOCK DATA GENERATOR
+// ✅ API CONFIGURATION
+// ============================================
+const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+console.log('🔧 API_BASE (Warranty):', API_BASE);
+
+const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+});
+
+api.interceptors.request.use(
+  config => {
+    console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  response => {
+    console.log('📥 API Response:', response.status, response.config.url);
+    return response;
+  },
+  error => {
+    console.error('❌ API Error:', error.response?.status, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
+
+// ============================================
+// ✅ MOCK DATA GENERATOR (Fallback)
 // ============================================
 const generateMockData = () => {
   const now = new Date();
   const formatDate = (d) => d.toISOString().split('T')[0];
   
   const customers = [
-    { CUS_ID: 1, FIRST_NAME: 'John', LAST_NAME: 'Doe', PHONE: '555-0101', EMAIL: 'john@example.com', ADDRESS: '123 Main St' },
-    { CUS_ID: 2, FIRST_NAME: 'Jane', LAST_NAME: 'Smith', PHONE: '555-0102', EMAIL: 'jane@example.com', ADDRESS: '456 Oak Ave' },
-    { CUS_ID: 3, FIRST_NAME: 'Robert', LAST_NAME: 'Johnson', PHONE: '555-0103', EMAIL: 'robert@example.com', ADDRESS: '789 Pine Rd' },
-    { CUS_ID: 4, FIRST_NAME: 'Mary', LAST_NAME: 'Williams', PHONE: '555-0104', EMAIL: 'mary@example.com', ADDRESS: '321 Elm St' },
-    { CUS_ID: 5, FIRST_NAME: 'David', LAST_NAME: 'Brown', PHONE: '555-0105', EMAIL: 'david@example.com', ADDRESS: '654 Maple Dr' }
+    { id: 1, cus_id: 'CUS001', first_name: 'John', last_name: 'Doe', phone: '555-0101', e_mail: 'john@example.com', address: '123 Main St' },
+    { id: 2, cus_id: 'CUS002', first_name: 'Jane', last_name: 'Smith', phone: '555-0102', e_mail: 'jane@example.com', address: '456 Oak Ave' },
+    { id: 3, cus_id: 'CUS003', first_name: 'Robert', last_name: 'Johnson', phone: '555-0103', e_mail: 'robert@example.com', address: '789 Pine Rd' },
+    { id: 4, cus_id: 'CUS004', first_name: 'Mary', last_name: 'Williams', phone: '555-0104', e_mail: 'mary@example.com', address: '321 Elm St' },
+    { id: 5, cus_id: 'CUS005', first_name: 'David', last_name: 'Brown', phone: '555-0105', e_mail: 'david@example.com', address: '654 Maple Dr' }
   ];
 
   const products = [
-    { PRODUCT_ID: 1, NAME_EN: 'Laptop Pro X1', PRICE: 1299.99, CATEGORY: 'Electronics' },
-    { PRODUCT_ID: 2, NAME_EN: 'Smartphone Ultra', PRICE: 899.99, CATEGORY: 'Electronics' },
-    { PRODUCT_ID: 3, NAME_EN: 'Tablet Plus', PRICE: 499.99, CATEGORY: 'Electronics' },
-    { PRODUCT_ID: 4, NAME_EN: 'Wireless Headphones', PRICE: 199.99, CATEGORY: 'Accessories' },
-    { PRODUCT_ID: 5, NAME_EN: 'Smart Watch Pro', PRICE: 349.99, CATEGORY: 'Wearables' }
+    { id: 1, product_id: 'PROD001', name_en: 'Laptop Pro X1', saleout_price: 1299.99, category: 'Electronics' },
+    { id: 2, product_id: 'PROD002', name_en: 'Smartphone Ultra', saleout_price: 899.99, category: 'Electronics' },
+    { id: 3, product_id: 'PROD003', name_en: 'Tablet Plus', saleout_price: 499.99, category: 'Electronics' },
+    { id: 4, product_id: 'PROD004', name_en: 'Wireless Headphones', saleout_price: 199.99, category: 'Accessories' },
+    { id: 5, product_id: 'PROD005', name_en: 'Smart Watch Pro', saleout_price: 349.99, category: 'Wearables' }
   ];
 
   const warranties = [];
@@ -42,7 +78,7 @@ const generateMockData = () => {
     'Water damage', 'Charging issue', 'Display problem', 'Performance slow'
   ];
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 8; i++) {
     const customer = customers[i % customers.length];
     const product = products[i % products.length];
     const startDate = new Date(now);
@@ -52,27 +88,31 @@ const generateMockData = () => {
     endDate.setMonth(endDate.getMonth() + period);
 
     warranties.push({
-      WarrantyID: i + 1,
-      CustomerID: customer.CUS_ID,
-      ProductID: product.PRODUCT_ID,
-      SerialNumber: `SN-${String(i + 1).padStart(4, '0')}`,
-      WarrantyPeriod: period,
-      WarrantyStartDate: formatDate(startDate),
-      WarrantyEndDate: formatDate(endDate),
-      Status: statuses[i % statuses.length],
-      notes: `Warranty for ${product.NAME_EN}`
+      warrantyid: i + 1,
+      customerid: customer.id,
+      productid: product.id,
+      serialnumber: `SN-${String(i + 1).padStart(4, '0')}`,
+      warrantyperiod: period,
+      warrantystartdate: formatDate(startDate),
+      warrantyenddate: formatDate(endDate),
+      status: statuses[i % statuses.length],
+      customer_name: `${customer.first_name} ${customer.last_name}`,
+      product_name: product.name_en,
+      notes: `Warranty for ${product.name_en}`
     });
 
-    if (i < 8) {
+    if (i < 6) {
       services.push({
-        ServiceID: i + 1,
-        CustomerID: customer.CUS_ID,
-        ProductID: product.PRODUCT_ID,
-        SerialNumber: `SN-${String(i + 1).padStart(4, '0')}`,
-        IssueDescription: issueDescriptions[i % issueDescriptions.length],
-        ServiceType: ['Repair', 'Maintenance'][i % 2],
-        Status: serviceStatuses[i % serviceStatuses.length],
-        ReceivedDate: formatDate(new Date(now.getFullYear(), now.getMonth() - i % 6, 1 + i % 28)),
+        serviceid: i + 1,
+        customerid: customer.id,
+        productid: product.id,
+        serialnumber: `SN-${String(i + 1).padStart(4, '0')}`,
+        issuedescription: issueDescriptions[i % issueDescriptions.length],
+        servicetype: ['Repair', 'Maintenance'][i % 2],
+        status: serviceStatuses[i % serviceStatuses.length],
+        receiveddate: formatDate(new Date(now.getFullYear(), now.getMonth() - i % 6, 1 + i % 28)),
+        customer_name: `${customer.first_name} ${customer.last_name}`,
+        product_name: product.name_en,
         notes: `Service ticket ${i + 1}`
       });
     }
@@ -82,7 +122,7 @@ const generateMockData = () => {
 };
 
 // ============================================
-// MAIN WARRANTY COMPONENT
+// ✅ MAIN WARRANTY COMPONENT
 // ============================================
 const Warranty = () => {
   // ===== STATE =====
@@ -139,87 +179,94 @@ const Warranty = () => {
   const isMounted = useRef(true);
   const searchTimeout = useRef(null);
 
-  // ===== LOAD DATA FROM LOCALSTORAGE =====
-  const loadData = useCallback(() => {
-    setLoading(true);
-    try {
-      // Try to load from localStorage first
-      const savedData = localStorage.getItem('spms_warranty_data');
-      
-      if (savedData) {
-        try {
-          const parsed = JSON.parse(savedData);
-          if (parsed && parsed.warranties && parsed.services) {
-            setWarranties(parsed.warranties);
-            setServices(parsed.services);
-            setCustomers(parsed.customers || generateMockData().customers);
-            setProducts(parsed.products || generateMockData().products);
-            calculateWarrantyStats(parsed.warranties);
-            calculateServiceStats(parsed.services);
-            setLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.error('Error parsing saved data:', e);
-        }
-      }
+  // ===== SHOW MESSAGE =====
+  const showMessage = useCallback((text, type = 'success') => {
+    setMessage(text);
+    setMessageType(type);
+    const timer = setTimeout(() => setMessage(''), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
-      // Generate new mock data
-      const mockData = generateMockData();
-      setWarranties(mockData.warranties);
-      setServices(mockData.services);
-      setCustomers(mockData.customers);
-      setProducts(mockData.products);
+  // ===== FETCH CUSTOMERS & PRODUCTS =====
+  const fetchCustomersAndProducts = useCallback(async () => {
+    try {
+      const [customersRes, productsRes] = await Promise.all([
+        api.get('/customers'),
+        api.get('/products')
+      ]);
       
-      calculateWarrantyStats(mockData.warranties);
-      calculateServiceStats(mockData.services);
-      
-      // Save to localStorage
-      localStorage.setItem('spms_warranty_data', JSON.stringify({
-        warranties: mockData.warranties,
-        services: mockData.services,
-        customers: mockData.customers,
-        products: mockData.products
-      }));
-    } catch (error) {
-      console.error('Error loading data:', error);
       if (isMounted.current) {
-        showMessage('❌ Failed to load data', 'error');
-        setWarranties([]);
-        setServices([]);
-        setCustomers([]);
-        setProducts([]);
-        calculateWarrantyStats([]);
-        calculateServiceStats([]);
+        const customersData = Array.isArray(customersRes.data) ? customersRes.data : [];
+        const productsData = Array.isArray(productsRes.data) ? productsRes.data : [];
+        
+        setCustomers(customersData);
+        setProducts(productsData);
+        console.log(`👥 Customers loaded: ${customersData.length}`);
+        console.log(`📦 Products loaded: ${productsData.length}`);
       }
-    } finally {
+    } catch (error) {
+      console.error('❌ Error fetching customers/products:', error);
       if (isMounted.current) {
-        setLoading(false);
-        setIsRefreshing(false);
+        const mockData = generateMockData();
+        setCustomers(mockData.customers);
+        setProducts(mockData.products);
       }
     }
   }, []);
 
-  // ===== SAVE TO LOCALSTORAGE =====
-  const saveToLocalStorage = useCallback(() => {
+  // ===== FETCH WARRANTIES =====
+  const fetchWarranties = useCallback(async () => {
     try {
-      localStorage.setItem('spms_warranty_data', JSON.stringify({
-        warranties,
-        services,
-        customers,
-        products
-      }));
-    } catch (e) {
-      console.error('Error saving to localStorage:', e);
+      const res = await api.get('/warranties');
+      if (isMounted.current) {
+        const data = Array.isArray(res.data) ? res.data : [];
+        setWarranties(data);
+        calculateWarrantyStats(data);
+        console.log(`🛡️ Warranties loaded: ${data.length}`);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching warranties:', error);
+      if (isMounted.current) {
+        const mockData = generateMockData();
+        setWarranties(mockData.warranties);
+        calculateWarrantyStats(mockData.warranties);
+        showMessage('⚠️ Using sample warranty data', 'warning');
+      }
     }
-  }, [warranties, services, customers, products]);
+  }, [showMessage]);
 
-  // ===== SAVE WHENEVER DATA CHANGES =====
-  useEffect(() => {
-    if (!loading && warranties.length > 0) {
-      saveToLocalStorage();
+  // ===== FETCH SERVICES =====
+  const fetchServices = useCallback(async () => {
+    try {
+      const res = await api.get('/services');
+      if (isMounted.current) {
+        const data = Array.isArray(res.data) ? res.data : [];
+        setServices(data);
+        calculateServiceStats(data);
+        console.log(`🔧 Services loaded: ${data.length}`);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching services:', error);
+      if (isMounted.current) {
+        const mockData = generateMockData();
+        setServices(mockData.services);
+        calculateServiceStats(mockData.services);
+        showMessage('⚠️ Using sample service data', 'warning');
+      }
     }
-  }, [warranties, services, customers, products, loading, saveToLocalStorage]);
+  }, [showMessage]);
+
+  // ===== LOAD ALL DATA =====
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    await Promise.all([
+      fetchCustomersAndProducts(),
+      fetchWarranties(),
+      fetchServices()
+    ]);
+    setLoading(false);
+    setIsRefreshing(false);
+  }, [fetchCustomersAndProducts, fetchWarranties, fetchServices]);
 
   // ===== CALCULATE STATS =====
   const calculateWarrantyStats = useCallback((data) => {
@@ -229,13 +276,13 @@ const Warranty = () => {
 
     const stats = {
       total: data.length,
-      active: data.filter(w => w.Status === 'Active').length,
+      active: data.filter(w => w.status === 'Active').length,
       expiring: data.filter(w => {
-        if (w.Status !== 'Active') return false;
-        const endDate = new Date(w.WarrantyEndDate);
+        if (w.status !== 'Active') return false;
+        const endDate = new Date(w.warrantyenddate);
         return endDate <= thirtyDaysFromNow && endDate > now;
       }).length,
-      expired: data.filter(w => w.Status === 'Expired').length
+      expired: data.filter(w => w.status === 'Expired').length
     };
     setWarrantyStats(stats);
   }, []);
@@ -243,19 +290,11 @@ const Warranty = () => {
   const calculateServiceStats = useCallback((data) => {
     const stats = {
       total: data.length,
-      pending: data.filter(s => s.Status === 'Pending').length,
-      inProgress: data.filter(s => s.Status === 'In Progress').length,
-      completed: data.filter(s => s.Status === 'Completed').length
+      pending: data.filter(s => s.status === 'Pending').length,
+      inProgress: data.filter(s => s.status === 'In Progress').length,
+      completed: data.filter(s => s.status === 'Completed').length
     };
     setServiceStats(stats);
-  }, []);
-
-  // ===== SHOW MESSAGE =====
-  const showMessage = useCallback((text, type = 'success') => {
-    setMessage(text);
-    setMessageType(type);
-    const timer = setTimeout(() => setMessage(''), 5000);
-    return () => clearTimeout(timer);
   }, []);
 
   // ===== INITIAL LOAD =====
@@ -277,8 +316,8 @@ const Warranty = () => {
       clearTimeout(searchTimeout.current);
     }
     searchTimeout.current = setTimeout(() => {
-      // Just filter locally, no API call needed
-    }, 500);
+      // Filter handled by useMemo
+    }, 300);
 
     return () => {
       if (searchTimeout.current) {
@@ -287,135 +326,27 @@ const Warranty = () => {
     };
   }, [searchTerm]);
 
-  // ===== FILTERED DATA =====
-  const filteredWarranties = useMemo(() => {
-    let result = [...warranties];
-
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(w => {
-        const customer = customers.find(c => c.CUS_ID === w.CustomerID);
-        const product = products.find(p => p.PRODUCT_ID === w.ProductID);
-        return (customer?.FIRST_NAME || '').toLowerCase().includes(term) ||
-               (customer?.LAST_NAME || '').toLowerCase().includes(term) ||
-               (product?.NAME_EN || '').toLowerCase().includes(term) ||
-               (w.SerialNumber || '').toLowerCase().includes(term);
-      });
-    }
-
-    if (filterStatus !== 'all') {
-      result = result.filter(w => {
-        if (filterStatus === 'active') return w.Status === 'Active';
-        if (filterStatus === 'expired') return w.Status === 'Expired';
-        return true;
-      });
-    }
-
-    result.sort((a, b) => {
-      let aVal, bVal;
-      if (sortBy === 'customer') {
-        const aCustomer = customers.find(c => c.CUS_ID === a.CustomerID);
-        const bCustomer = customers.find(c => c.CUS_ID === b.CustomerID);
-        aVal = `${aCustomer?.FIRST_NAME || ''} ${aCustomer?.LAST_NAME || ''}`;
-        bVal = `${bCustomer?.FIRST_NAME || ''} ${bCustomer?.LAST_NAME || ''}`;
-      } else if (sortBy === 'product') {
-        const aProduct = products.find(p => p.PRODUCT_ID === a.ProductID);
-        const bProduct = products.find(p => p.PRODUCT_ID === b.ProductID);
-        aVal = aProduct?.NAME_EN || '';
-        bVal = bProduct?.NAME_EN || '';
-      } else if (sortBy === 'end_date') {
-        aVal = new Date(a.WarrantyEndDate);
-        bVal = new Date(b.WarrantyEndDate);
-      } else {
-        aVal = a[sortBy] ?? '';
-        bVal = b[sortBy] ?? '';
-      }
-
-      if (typeof aVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
-      }
-
-      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [warranties, searchTerm, filterStatus, sortBy, sortOrder, customers, products]);
-
-  const filteredServices = useMemo(() => {
-    let result = [...services];
-
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(s => {
-        const customer = customers.find(c => c.CUS_ID === s.CustomerID);
-        const product = products.find(p => p.PRODUCT_ID === s.ProductID);
-        return (customer?.FIRST_NAME || '').toLowerCase().includes(term) ||
-               (customer?.LAST_NAME || '').toLowerCase().includes(term) ||
-               (product?.NAME_EN || '').toLowerCase().includes(term) ||
-               (s.IssueDescription || '').toLowerCase().includes(term);
-      });
-    }
-
-    if (filterStatus !== 'all') {
-      const statusMap = {
-        'pending': 'Pending',
-        'in_progress': 'In Progress',
-        'completed': 'Completed'
-      };
-      const targetStatus = statusMap[filterStatus] || filterStatus;
-      result = result.filter(s => s.Status === targetStatus);
-    }
-
-    if (filterType !== 'all') {
-      result = result.filter(s => s.ServiceType === filterType);
-    }
-
-    result.sort((a, b) => {
-      let aVal, bVal;
-      if (sortBy === 'customer') {
-        const aCustomer = customers.find(c => c.CUS_ID === a.CustomerID);
-        const bCustomer = customers.find(c => c.CUS_ID === b.CustomerID);
-        aVal = `${aCustomer?.FIRST_NAME || ''} ${aCustomer?.LAST_NAME || ''}`;
-        bVal = `${bCustomer?.FIRST_NAME || ''} ${bCustomer?.LAST_NAME || ''}`;
-      } else if (sortBy === 'product') {
-        const aProduct = products.find(p => p.PRODUCT_ID === a.ProductID);
-        const bProduct = products.find(p => p.PRODUCT_ID === b.ProductID);
-        aVal = aProduct?.NAME_EN || '';
-        bVal = bProduct?.NAME_EN || '';
-      } else {
-        aVal = a[sortBy] ?? '';
-        bVal = b[sortBy] ?? '';
-      }
-
-      if (typeof aVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
-      }
-
-      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return result;
-  }, [services, searchTerm, filterStatus, filterType, sortBy, sortOrder, customers, products]);
-
-  const currentData = useMemo(() => {
-    return activeTab === 'warranty' ? filteredWarranties : filteredServices;
-  }, [activeTab, filteredWarranties, filteredServices]);
-
   // ===== GET HELPER FUNCTIONS =====
   const getCustomerName = useCallback((item) => {
-    const customer = customers.find(c => c.CUS_ID === item.CustomerID);
-    return customer ? `${customer.FIRST_NAME} ${customer.LAST_NAME}` : 'Unknown';
+    if (item.customer_name) return item.customer_name;
+    const customer = customers.find(c => 
+      c.id === item.customerid || 
+      c.id === item.CustomerID ||
+      parseInt(c.cus_id) === item.customerid ||
+      parseInt(c.id) === item.CustomerID
+    );
+    return customer ? `${customer.first_name || customer.FIRST_NAME || ''} ${customer.last_name || customer.LAST_NAME || ''}`.trim() || 'Unknown' : 'Unknown';
   }, [customers]);
 
   const getProductName = useCallback((item) => {
-    const product = products.find(p => p.PRODUCT_ID === item.ProductID);
-    return product?.NAME_EN || 'Unknown';
+    if (item.product_name) return item.product_name;
+    const product = products.find(p => 
+      p.id === item.productid || 
+      p.id === item.ProductID ||
+      parseInt(p.product_id) === item.productid ||
+      parseInt(p.id) === item.ProductID
+    );
+    return product?.name_en || product?.NAME_EN || 'Unknown';
   }, [products]);
 
   const formatDate = useCallback((dateValue) => {
@@ -442,24 +373,19 @@ const Warranty = () => {
       'In Progress': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
       'Completed': 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800'
     };
-    const color = statusMap[status] || statusMap['Pending'];
-    return (
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${color}`}>
-        {status || 'Unknown'}
-      </span>
-    );
+    return `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusMap[status] || statusMap['Pending']}`;
   }, []);
 
   // ===== GET STATUS ICON =====
   const getStatusIcon = useCallback((status) => {
-    const iconMap = {
+    const icons = {
       'Active': CheckCircle,
       'Expired': X,
       'Pending': Clock,
       'In Progress': Activity,
       'Completed': Award
     };
-    const Icon = iconMap[status] || Clock;
+    const Icon = icons[status] || Clock;
     return <Icon className="w-3.5 h-3.5" />;
   }, []);
 
@@ -499,83 +425,118 @@ const Warranty = () => {
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   }, []);
 
-  // ===== EXPORT =====
-  const handleExport = useCallback(() => {
-    if (currentData.length === 0) {
-      showMessage('⚠️ No data to export', 'warning');
-      return;
-    }
+  // ===== FILTERED DATA =====
+  const filteredWarranties = useMemo(() => {
+    let result = [...warranties];
 
-    try {
-      const headers = activeTab === 'warranty' 
-        ? ['ID', 'Customer', 'Product', 'Serial', 'Start Date', 'End Date', 'Status']
-        : ['ID', 'Customer', 'Product', 'Issue', 'Type', 'Status', 'Date'];
-      
-      let csv = headers.join(',') + '\n';
-      currentData.forEach(item => {
-        const customerName = getCustomerName(item);
-        const productName = getProductName(item);
-
-        const row = activeTab === 'warranty' 
-          ? [item.WarrantyID, `"${customerName}"`, `"${productName}"`, item.SerialNumber, 
-             formatDate(item.WarrantyStartDate), formatDate(item.WarrantyEndDate), item.Status]
-          : [item.ServiceID, `"${customerName}"`, `"${productName}"`, 
-             `"${(item.IssueDescription || '').replace(/"/g, '""')}"`, item.ServiceType, item.Status, formatDate(item.ReceivedDate)];
-        csv += row.join(',') + '\n';
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(w => {
+        const customerName = w.customer_name || getCustomerName(w);
+        const productName = w.product_name || getProductName(w);
+        return customerName.toLowerCase().includes(term) ||
+               productName.toLowerCase().includes(term) ||
+               (w.serialnumber || '').toLowerCase().includes(term);
       });
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${activeTab}_${new Date().toISOString().slice(0,10)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
-      showMessage(`✅ ${currentData.length} records exported successfully!`);
-    } catch (error) {
-      console.error('Export error:', error);
-      showMessage('❌ Failed to export data', 'error');
     }
-  }, [currentData, activeTab, getCustomerName, getProductName, formatDate, showMessage]);
 
-  // ===== HANDLE DELETE =====
-  const handleDelete = useCallback((id) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
-
-    if (activeTab === 'warranty') {
-      const updatedWarranties = warranties.filter(w => w.WarrantyID !== id);
-      setWarranties(updatedWarranties);
-      calculateWarrantyStats(updatedWarranties);
-      showMessage('✅ Warranty deleted successfully!');
-    } else {
-      const updatedServices = services.filter(s => s.ServiceID !== id);
-      setServices(updatedServices);
-      calculateServiceStats(updatedServices);
-      showMessage('✅ Service deleted successfully!');
+    if (filterStatus !== 'all') {
+      result = result.filter(w => {
+        if (filterStatus === 'active') return w.status === 'Active';
+        if (filterStatus === 'expired') return w.status === 'Expired';
+        return true;
+      });
     }
-  }, [activeTab, warranties, services, calculateWarrantyStats, calculateServiceStats, showMessage]);
 
-  // ===== BULK DELETE =====
-  const handleBulkDelete = useCallback(() => {
-    if (selectedItems.length === 0) return;
-    if (!window.confirm(`Delete ${selectedItems.length} selected items?`)) return;
+    result.sort((a, b) => {
+      let aVal, bVal;
+      if (sortBy === 'customer') {
+        aVal = a.customer_name || getCustomerName(a);
+        bVal = b.customer_name || getCustomerName(b);
+      } else if (sortBy === 'product') {
+        aVal = a.product_name || getProductName(a);
+        bVal = b.product_name || getProductName(b);
+      } else if (sortBy === 'end_date') {
+        aVal = new Date(a.warrantyenddate);
+        bVal = new Date(b.warrantyenddate);
+      } else {
+        aVal = a[sortBy] ?? '';
+        bVal = b[sortBy] ?? '';
+      }
 
-    if (activeTab === 'warranty') {
-      const updatedWarranties = warranties.filter(w => !selectedItems.includes(w.WarrantyID));
-      setWarranties(updatedWarranties);
-      calculateWarrantyStats(updatedWarranties);
-    } else {
-      const updatedServices = services.filter(s => !selectedItems.includes(s.ServiceID));
-      setServices(updatedServices);
-      calculateServiceStats(updatedServices);
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+
+      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [warranties, searchTerm, filterStatus, sortBy, sortOrder, getCustomerName, getProductName]);
+
+  const filteredServices = useMemo(() => {
+    let result = [...services];
+
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(s => {
+        const customerName = s.customer_name || getCustomerName(s);
+        const productName = s.product_name || getProductName(s);
+        return customerName.toLowerCase().includes(term) ||
+               productName.toLowerCase().includes(term) ||
+               (s.issuedescription || '').toLowerCase().includes(term);
+      });
     }
-    
-    showMessage(`✅ ${selectedItems.length} items deleted!`);
-    setSelectedItems([]);
-  }, [selectedItems, activeTab, warranties, services, calculateWarrantyStats, calculateServiceStats, showMessage]);
+
+    if (filterStatus !== 'all') {
+      const statusMap = {
+        'pending': 'Pending',
+        'in_progress': 'In Progress',
+        'completed': 'Completed'
+      };
+      const targetStatus = statusMap[filterStatus] || filterStatus;
+      result = result.filter(s => s.status === targetStatus);
+    }
+
+    if (filterType !== 'all') {
+      result = result.filter(s => s.servicetype === filterType);
+    }
+
+    result.sort((a, b) => {
+      let aVal, bVal;
+      if (sortBy === 'customer') {
+        aVal = a.customer_name || getCustomerName(a);
+        bVal = b.customer_name || getCustomerName(b);
+      } else if (sortBy === 'product') {
+        aVal = a.product_name || getProductName(a);
+        bVal = b.product_name || getProductName(b);
+      } else if (sortBy === 'date') {
+        aVal = new Date(a.receiveddate);
+        bVal = new Date(b.receiveddate);
+      } else {
+        aVal = a[sortBy] ?? '';
+        bVal = b[sortBy] ?? '';
+      }
+
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+
+      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return result;
+  }, [services, searchTerm, filterStatus, filterType, sortBy, sortOrder, getCustomerName, getProductName]);
+
+  const currentData = useMemo(() => {
+    return activeTab === 'warranty' ? filteredWarranties : filteredServices;
+  }, [activeTab, filteredWarranties, filteredServices]);
 
   // ===== RESET FORM =====
   const resetForm = useCallback(() => {
@@ -601,20 +562,37 @@ const Warranty = () => {
   const openEditModal = useCallback((item) => {
     setEditingItem(item);
     
-    setFormData({
-      customer_id: String(item.CustomerID || ''),
-      product_id: String(item.ProductID || ''),
-      serial_number: item.SerialNumber || '',
-      warranty_period: item.WarrantyPeriod || 12,
-      start_date: item.WarrantyStartDate || '',
-      end_date: item.WarrantyEndDate || '',
-      status: item.Status || 'Active',
-      issue_description: item.IssueDescription || '',
-      service_type: item.ServiceType || 'Repair',
-      received_date: item.ReceivedDate || ''
-    });
+    if (activeTab === 'warranty') {
+      setFormData({
+        customer_id: String(item.customerid || item.CustomerID || ''),
+        product_id: String(item.productid || item.ProductID || ''),
+        serial_number: item.serialnumber || item.SerialNumber || '',
+        warranty_period: item.warrantyperiod || item.WarrantyPeriod || 12,
+        start_date: item.warrantystartdate || item.WarrantyStartDate || '',
+        end_date: item.warrantyenddate || item.WarrantyEndDate || '',
+        status: item.status || item.Status || 'Active',
+        issue_description: '',
+        service_type: 'Repair',
+        received_date: '',
+        notes: item.notes || ''
+      });
+    } else {
+      setFormData({
+        customer_id: String(item.customerid || item.CustomerID || ''),
+        product_id: String(item.productid || item.ProductID || ''),
+        serial_number: item.serialnumber || item.SerialNumber || '',
+        warranty_period: 12,
+        start_date: '',
+        end_date: '',
+        status: item.status || item.Status || 'Pending',
+        issue_description: item.issuedescription || item.IssueDescription || '',
+        service_type: item.servicetype || item.ServiceType || 'Repair',
+        received_date: item.receiveddate || item.ReceivedDate || '',
+        notes: item.notes || ''
+      });
+    }
     setShowModal(true);
-  }, []);
+  }, [activeTab]);
 
   const openAddModal = useCallback(() => {
     setEditingItem(null);
@@ -623,20 +601,19 @@ const Warranty = () => {
   }, [resetForm]);
 
   // ===== HANDLE SUBMIT =====
-  const handleSubmit = useCallback((e) => {
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setSubmitting(true);
 
     try {
-      const newItem = {
-        ...formData,
+      const data = {
         CustomerID: parseInt(formData.customer_id),
         ProductID: parseInt(formData.product_id),
         SerialNumber: formData.serial_number || `SN-${String(Date.now()).slice(-4)}`,
+        notes: formData.notes || ''
       };
 
       if (activeTab === 'warranty') {
-        // Validate dates
         const startDate = new Date(formData.start_date);
         const endDate = new Date(formData.end_date);
         if (endDate <= startDate) {
@@ -645,57 +622,35 @@ const Warranty = () => {
           return;
         }
 
-        const newWarranty = {
-          WarrantyID: editingItem ? editingItem.WarrantyID : warranties.length + 1,
-          CustomerID: newItem.CustomerID,
-          ProductID: newItem.ProductID,
-          SerialNumber: newItem.SerialNumber,
-          WarrantyPeriod: parseInt(formData.warranty_period) || 12,
-          WarrantyStartDate: formData.start_date || new Date().toISOString().split('T')[0],
-          WarrantyEndDate: formData.end_date || new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
-          Status: formData.status || 'Active',
-          notes: ''
-        };
-        
-        let updatedWarranties;
+        data.WarrantyPeriod = parseInt(formData.warranty_period) || 12;
+        data.WarrantyStartDate = formData.start_date || new Date().toISOString().split('T')[0];
+        data.WarrantyEndDate = formData.end_date;
+        data.Status = formData.status || 'Active';
+
         if (editingItem) {
-          updatedWarranties = warranties.map(w => 
-            w.WarrantyID === editingItem.WarrantyID ? { ...newWarranty, WarrantyID: w.WarrantyID } : w
-          );
-          setWarranties(updatedWarranties);
+          const id = editingItem.warrantyid || editingItem.WarrantyID;
+          await api.put(`/warranties/${id}`, data);
           showMessage('✅ Warranty updated successfully!');
         } else {
-          updatedWarranties = [...warranties, newWarranty];
-          setWarranties(updatedWarranties);
-          showMessage('✅ New warranty added successfully!');
+          await api.post('/warranties', data);
+          showMessage('✅ Warranty created successfully!');
         }
-        calculateWarrantyStats(updatedWarranties);
+        await fetchWarranties();
       } else {
-        const newService = {
-          ServiceID: editingItem ? editingItem.ServiceID : services.length + 1,
-          CustomerID: newItem.CustomerID,
-          ProductID: newItem.ProductID,
-          SerialNumber: newItem.SerialNumber,
-          IssueDescription: formData.issue_description || 'Service request',
-          ServiceType: formData.service_type || 'Repair',
-          Status: formData.status || 'Pending',
-          ReceivedDate: formData.received_date || new Date().toISOString().split('T')[0],
-          notes: ''
-        };
-        
-        let updatedServices;
+        data.IssueDescription = formData.issue_description || 'Service request';
+        data.ServiceType = formData.service_type || 'Repair';
+        data.Status = formData.status || 'Pending';
+        data.ReceivedDate = formData.received_date || new Date().toISOString().split('T')[0];
+
         if (editingItem) {
-          updatedServices = services.map(s => 
-            s.ServiceID === editingItem.ServiceID ? { ...newService, ServiceID: s.ServiceID } : s
-          );
-          setServices(updatedServices);
+          const id = editingItem.serviceid || editingItem.ServiceID;
+          await api.put(`/services/${id}`, data);
           showMessage('✅ Service updated successfully!');
         } else {
-          updatedServices = [...services, newService];
-          setServices(updatedServices);
-          showMessage('✅ New service added successfully!');
+          await api.post('/services', data);
+          showMessage('✅ Service created successfully!');
         }
-        calculateServiceStats(updatedServices);
+        await fetchServices();
       }
 
       setShowModal(false);
@@ -703,11 +658,65 @@ const Warranty = () => {
       resetForm();
     } catch (error) {
       console.error('Submit error:', error);
-      showMessage('❌ Failed to save', 'error');
+      showMessage(`❌ ${error.response?.data?.error || 'Failed to save'}`, 'error');
     } finally {
       setSubmitting(false);
     }
-  }, [formData, activeTab, editingItem, warranties, services, resetForm, showMessage, calculateWarrantyStats, calculateServiceStats]);
+  }, [formData, activeTab, editingItem, fetchWarranties, fetchServices, resetForm, showMessage]);
+
+  // ===== HANDLE DELETE =====
+  const handleDelete = useCallback(async (id) => {
+    if (!window.confirm('Are you sure you want to delete this item?')) return;
+
+    try {
+      if (activeTab === 'warranty') {
+        await api.delete(`/warranties/${id}`);
+        await fetchWarranties();
+        showMessage('✅ Warranty deleted successfully!');
+      } else {
+        await api.delete(`/services/${id}`);
+        await fetchServices();
+        showMessage('✅ Service deleted successfully!');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      showMessage(`❌ ${error.response?.data?.error || 'Failed to delete'}`, 'error');
+    }
+  }, [activeTab, fetchWarranties, fetchServices, showMessage]);
+
+  // ===== BULK DELETE =====
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedItems.length === 0) return;
+    if (!window.confirm(`Delete ${selectedItems.length} selected items?`)) return;
+
+    try {
+      if (activeTab === 'warranty') {
+        await api.delete('/warranties/bulk', { data: { ids: selectedItems } });
+        await fetchWarranties();
+      } else {
+        await api.delete('/services/bulk', { data: { ids: selectedItems } });
+        await fetchServices();
+      }
+      showMessage(`✅ ${selectedItems.length} items deleted!`);
+      setSelectedItems([]);
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      showMessage(`❌ ${error.response?.data?.error || 'Failed to delete items'}`, 'error');
+    }
+  }, [selectedItems, activeTab, fetchWarranties, fetchServices, showMessage]);
+
+  // ===== REFRESH =====
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await loadData();
+    showMessage('✅ Data refreshed!');
+  }, [loadData, showMessage]);
+
+  // ===== VIEW DETAIL =====
+  const viewDetail = useCallback((item) => {
+    setSelectedItem(item);
+    setShowDetailModal(true);
+  }, []);
 
   // ===== TOGGLE SELECT =====
   const toggleSelect = useCallback((id) => {
@@ -726,23 +735,52 @@ const Warranty = () => {
       setSelectedItems([]);
     } else {
       setSelectedItems(currentData.map(item => 
-        activeTab === 'warranty' ? item.WarrantyID : item.ServiceID
+        activeTab === 'warranty' ? (item.warrantyid || item.WarrantyID) : (item.serviceid || item.ServiceID)
       ));
     }
   }, [selectedItems, currentData, activeTab]);
 
-  // ===== VIEW DETAIL =====
-  const viewDetail = useCallback((item) => {
-    setSelectedItem(item);
-    setShowDetailModal(true);
-  }, []);
+  // ===== EXPORT =====
+  const handleExport = useCallback(() => {
+    if (currentData.length === 0) {
+      showMessage('⚠️ No data to export', 'warning');
+      return;
+    }
 
-  // ===== REFRESH =====
-  const handleRefresh = useCallback(() => {
-    setIsRefreshing(true);
-    loadData();
-    showMessage('✅ Data refreshed!');
-  }, [loadData, showMessage]);
+    try {
+      const headers = activeTab === 'warranty' 
+        ? ['ID', 'Customer', 'Product', 'Serial', 'Start Date', 'End Date', 'Status']
+        : ['ID', 'Customer', 'Product', 'Issue', 'Type', 'Status', 'Date'];
+      
+      let csv = headers.join(',') + '\n';
+      currentData.forEach(item => {
+        const customerName = item.customer_name || getCustomerName(item);
+        const productName = item.product_name || getProductName(item);
+
+        const row = activeTab === 'warranty' 
+          ? [item.warrantyid || item.WarrantyID, `"${customerName}"`, `"${productName}"`, item.serialnumber || item.SerialNumber, 
+             formatDate(item.warrantystartdate || item.WarrantyStartDate), formatDate(item.warrantyenddate || item.WarrantyEndDate), item.status || item.Status]
+          : [item.serviceid || item.ServiceID, `"${customerName}"`, `"${productName}"`, 
+             `"${(item.issuedescription || item.IssueDescription || '').replace(/"/g, '""')}"`, item.servicetype || item.ServiceType, item.status || item.Status, formatDate(item.receiveddate || item.ReceivedDate)];
+        csv += row.join(',') + '\n';
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${activeTab}_${new Date().toISOString().slice(0,10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showMessage(`✅ ${currentData.length} records exported successfully!`);
+    } catch (error) {
+      console.error('Export error:', error);
+      showMessage('❌ Failed to export data', 'error');
+    }
+  }, [currentData, activeTab, getCustomerName, getProductName, formatDate, showMessage]);
 
   // ===== LOADING =====
   if (loading) {
@@ -1078,9 +1116,9 @@ const Warranty = () => {
           // ===== GRID VIEW =====
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
             {currentData.map((item, index) => {
-              const id = activeTab === 'warranty' ? item.WarrantyID : item.ServiceID;
-              const customerName = getCustomerName(item);
-              const productName = getProductName(item);
+              const id = activeTab === 'warranty' ? (item.warrantyid || item.WarrantyID) : (item.serviceid || item.ServiceID);
+              const customerName = item.customer_name || getCustomerName(item);
+              const productName = item.product_name || getProductName(item);
               const initials = getInitials(customerName);
               const avatarColor = getAvatarColor(customerName);
               const isSelected = selectedItems.includes(id);
@@ -1149,32 +1187,32 @@ const Warranty = () => {
                     <div className="space-y-1.5 mb-3">
                       <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
                         <ClipboardList className="w-3.5 h-3.5 text-gray-400" />
-                        {item.SerialNumber || 'N/A'}
+                        {item.serialnumber || item.SerialNumber || 'N/A'}
                       </p>
                       {activeTab === 'warranty' ? (
                         <>
                           <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
                             <Calendar className="w-3.5 h-3.5 text-purple-500" />
-                            {formatDate(item.WarrantyStartDate)} → {formatDate(item.WarrantyEndDate)}
+                            {formatDate(item.warrantystartdate || item.WarrantyStartDate)} → {formatDate(item.warrantyenddate || item.WarrantyEndDate)}
                           </p>
                           <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
                             <Clock className="w-3.5 h-3.5 text-blue-500" />
-                            {item.WarrantyPeriod} months
+                            {item.warrantyperiod || item.WarrantyPeriod || 12} months
                           </p>
                         </>
                       ) : (
                         <>
                           <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2 truncate">
                             <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                            <span className="truncate">{item.IssueDescription || 'No description'}</span>
+                            <span className="truncate">{item.issuedescription || item.IssueDescription || 'No description'}</span>
                           </p>
                           <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
                             <Briefcase className="w-3.5 h-3.5 text-amber-500" />
-                            {item.ServiceType || 'N/A'}
+                            {item.servicetype || item.ServiceType || 'N/A'}
                           </p>
                           <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
                             <Calendar className="w-3.5 h-3.5 text-purple-500" />
-                            Received: {formatDate(item.ReceivedDate)}
+                            Received: {formatDate(item.receiveddate || item.ReceivedDate)}
                           </p>
                         </>
                       )}
@@ -1182,9 +1220,9 @@ const Warranty = () => {
 
                     {/* Status */}
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(item.Status)}`}>
-                        {getStatusIcon(item.Status)}
-                        {item.Status}
+                      <span className={getStatusBadge(item.status || item.Status)}>
+                        {getStatusIcon(item.status || item.Status)}
+                        {item.status || item.Status}
                       </span>
                       <span className="text-xs text-gray-400">
                         ID: #{id}
@@ -1231,9 +1269,9 @@ const Warranty = () => {
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {currentData.map((item, index) => {
-                  const id = activeTab === 'warranty' ? item.WarrantyID : item.ServiceID;
-                  const customerName = getCustomerName(item);
-                  const productName = getProductName(item);
+                  const id = activeTab === 'warranty' ? (item.warrantyid || item.WarrantyID) : (item.serviceid || item.ServiceID);
+                  const customerName = item.customer_name || getCustomerName(item);
+                  const productName = item.product_name || getProductName(item);
                   const isSelected = selectedItems.includes(id);
 
                   return (
@@ -1262,35 +1300,38 @@ const Warranty = () => {
                         {productName}
                       </td>
                       <td className="px-4 py-3 text-sm font-mono text-gray-500 dark:text-gray-400 hidden md:table-cell">
-                        {item.SerialNumber || '-'}
+                        {item.serialnumber || item.SerialNumber || '-'}
                       </td>
                       {activeTab === 'warranty' ? (
                         <>
                           <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell">
-                            {formatDate(item.WarrantyStartDate)}
+                            {formatDate(item.warrantystartdate || item.WarrantyStartDate)}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell">
-                            {formatDate(item.WarrantyEndDate)}
+                            {formatDate(item.warrantyenddate || item.WarrantyEndDate)}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden sm:table-cell">
-                            {item.WarrantyPeriod} mo
+                            {item.warrantyperiod || item.WarrantyPeriod || 12} mo
                           </td>
                         </>
                       ) : (
                         <>
                           <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden lg:table-cell max-w-[150px] truncate">
-                            {item.IssueDescription || '-'}
+                            {item.issuedescription || item.IssueDescription || '-'}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden sm:table-cell">
-                            {item.ServiceType || '-'}
+                            {item.servicetype || item.ServiceType || '-'}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hidden md:table-cell">
-                            {formatDate(item.ReceivedDate)}
+                            {formatDate(item.receiveddate || item.ReceivedDate)}
                           </td>
                         </>
                       )}
                       <td className="px-4 py-3 text-center">
-                        {getStatusBadge(item.Status)}
+                        <span className={getStatusBadge(item.status || item.Status)}>
+                          {getStatusIcon(item.status || item.Status)}
+                          {item.status || item.Status}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -1365,18 +1406,21 @@ const Warranty = () => {
             <div className="p-6">
               {/* Header */}
               <div className="flex items-center gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
-                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl ${getAvatarColor(getCustomerName(selectedItem))} shadow-lg`}>
-                  {getInitials(getCustomerName(selectedItem))}
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl ${getAvatarColor(customerName)} shadow-lg`}>
+                  {getInitials(customerName)}
                 </div>
                 <div>
-                  <p className="text-lg font-bold dark:text-white">{getCustomerName(selectedItem)}</p>
+                  <p className="text-lg font-bold dark:text-white">{customerName}</p>
                   <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
                     <Package className="w-4 h-4" />
-                    {getProductName(selectedItem)}
+                    {productName}
                   </p>
                   <div className="flex items-center gap-2 mt-1">
-                    {getStatusBadge(selectedItem.Status)}
-                    <span className="text-xs text-gray-400">#{activeTab === 'warranty' ? selectedItem.WarrantyID : selectedItem.ServiceID}</span>
+                    <span className={getStatusBadge(selectedItem.status || selectedItem.Status)}>
+                      {getStatusIcon(selectedItem.status || selectedItem.Status)}
+                      {selectedItem.status || selectedItem.Status}
+                    </span>
+                    <span className="text-xs text-gray-400">#{activeTab === 'warranty' ? (selectedItem.warrantyid || selectedItem.WarrantyID) : (selectedItem.serviceid || selectedItem.ServiceID)}</span>
                   </div>
                 </div>
               </div>
@@ -1386,36 +1430,36 @@ const Warranty = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
                     <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">Serial Number</p>
-                    <p className="font-medium dark:text-white font-mono">{selectedItem.SerialNumber || 'N/A'}</p>
+                    <p className="font-medium dark:text-white font-mono">{selectedItem.serialnumber || selectedItem.SerialNumber || 'N/A'}</p>
                   </div>
                   {activeTab === 'warranty' ? (
                     <>
                       <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
                         <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">Period</p>
-                        <p className="font-medium dark:text-white">{selectedItem.WarrantyPeriod || 'N/A'} months</p>
+                        <p className="font-medium dark:text-white">{selectedItem.warrantyperiod || selectedItem.WarrantyPeriod || 'N/A'} months</p>
                       </div>
                       <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
                         <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">Start Date</p>
-                        <p className="font-medium dark:text-white">{formatDate(selectedItem.WarrantyStartDate)}</p>
+                        <p className="font-medium dark:text-white">{formatDate(selectedItem.warrantystartdate || selectedItem.WarrantyStartDate)}</p>
                       </div>
                       <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
                         <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">End Date</p>
-                        <p className="font-medium dark:text-white">{formatDate(selectedItem.WarrantyEndDate)}</p>
+                        <p className="font-medium dark:text-white">{formatDate(selectedItem.warrantyenddate || selectedItem.WarrantyEndDate)}</p>
                       </div>
                     </>
                   ) : (
                     <>
                       <div className="col-span-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
                         <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">Issue Description</p>
-                        <p className="font-medium dark:text-white">{selectedItem.IssueDescription || 'N/A'}</p>
+                        <p className="font-medium dark:text-white">{selectedItem.issuedescription || selectedItem.IssueDescription || 'N/A'}</p>
                       </div>
                       <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
                         <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">Service Type</p>
-                        <p className="font-medium dark:text-white">{selectedItem.ServiceType || 'N/A'}</p>
+                        <p className="font-medium dark:text-white">{selectedItem.servicetype || selectedItem.ServiceType || 'N/A'}</p>
                       </div>
                       <div className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-xl">
                         <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">Received Date</p>
-                        <p className="font-medium dark:text-white">{formatDate(selectedItem.ReceivedDate)}</p>
+                        <p className="font-medium dark:text-white">{formatDate(selectedItem.receiveddate || selectedItem.ReceivedDate)}</p>
                       </div>
                     </>
                   )}
@@ -1487,8 +1531,8 @@ const Warranty = () => {
                   >
                     <option value="">Select Customer</option>
                     {customers.map((c) => (
-                      <option key={c.CUS_ID} value={c.CUS_ID}>
-                        {c.FIRST_NAME} {c.LAST_NAME}
+                      <option key={c.id || c.CUS_ID} value={c.id || c.CUS_ID}>
+                        {c.first_name || c.FIRST_NAME} {c.last_name || c.LAST_NAME}
                       </option>
                     ))}
                   </select>
@@ -1509,8 +1553,8 @@ const Warranty = () => {
                   >
                     <option value="">Select Product</option>
                     {products.map((p) => (
-                      <option key={p.PRODUCT_ID} value={p.PRODUCT_ID}>
-                        {p.NAME_EN}
+                      <option key={p.id || p.PRODUCT_ID} value={p.id || p.PRODUCT_ID}>
+                        {p.name_en || p.NAME_EN}
                       </option>
                     ))}
                   </select>

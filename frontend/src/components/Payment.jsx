@@ -19,7 +19,7 @@ const PaymentForm = ({ amount, orderId, onSuccess }) => {
     setError('');
 
     try {
-      const { data } = await axios.post('/api/payments/create-payment-intent', {
+      const { data } = await axios.post('/payments/create-payment-intent', {
         amount,
         orderId
       });
@@ -32,7 +32,7 @@ const PaymentForm = ({ amount, orderId, onSuccess }) => {
       if (stripeError) {
         setError(stripeError.message);
       } else if (paymentIntent.status === 'succeeded') {
-        await axios.post('/api/payments/record', {
+        await axios.post('/payments/record', {
           order_id: orderId,
           amount,
           payment_method: 'Card',
@@ -79,3 +79,4 @@ const Payment = ({ amount, orderId, onSuccess }) => {
 };
 
 export default Payment;
+

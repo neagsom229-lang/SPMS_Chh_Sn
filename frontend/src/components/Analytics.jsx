@@ -19,11 +19,44 @@ import {
   Globe, Heart, Coffee, Sun, Moon, Cloud,
   Move, ArrowRight, ArrowLeft, CornerDownRight,
   CircleDot, Square, Diamond, Hexagon, Octagon,
-  X
+  X, Box, Tag, Layers as LayersIcon
 } from 'lucide-react';
 
 // ============================================
-// CONSTANTS
+// ✅ API CONFIGURATION
+// ============================================
+const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+
+const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+});
+
+api.interceptors.request.use(
+  config => {
+    console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  response => {
+    console.log('📥 API Response:', response.status, response.config.url);
+    return response;
+  },
+  error => {
+    console.error('❌ API Error:', error.response?.status, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
+
+// ============================================
+// ✅ CONSTANTS
 // ============================================
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f472b6', '#8b5cf6'];
 
@@ -42,7 +75,7 @@ const TABS = [
 ];
 
 // ============================================
-// NUMERIC SAFETY HELPER
+// ✅ NUMERIC SAFETY HELPER
 // ============================================
 const num = (value, fallback = 0) => {
   const n = Number(value);
@@ -50,7 +83,7 @@ const num = (value, fallback = 0) => {
 };
 
 // ============================================
-// MOCK DATA
+// ✅ MOCK DATA
 // ============================================
 const MOCK_DATA = {
   monthly: () => {
@@ -64,10 +97,10 @@ const MOCK_DATA = {
     }));
   },
   products: () => {
-    const products = ['Wireless Mouse', 'Keyboard Pro', 'USB-C Hub', 'Monitor Stand', 'Laptop Bag', 'Webcam HD', 'Desk Mat', 'Cable Kit', 'Phone Holder', 'Charger Pro'];
+    const products = ['Laptop Gaming Pro', 'iPhone 17 Pro Max', 'Vivo', 'Watch Rolex', 'Watch'];
     return products.map(name => ({
       product_name: name,
-      total_sold: Math.floor(Math.random() * 100) + 10,
+      total_sold: Math.floor(Math.random() * 20) + 1,
       revenue: Math.floor(Math.random() * 5000) + 500,
       growth: Math.floor(Math.random() * 40) - 10,
       rating: (Math.random() * 2 + 3).toFixed(1)
@@ -83,52 +116,47 @@ const MOCK_DATA = {
     }));
   },
   summary: () => ({
-    totalRevenue: Math.floor(Math.random() * 50000) + 10000,
-    totalOrders: Math.floor(Math.random() * 500) + 100,
-    totalProducts: Math.floor(Math.random() * 100) + 20,
-    averageOrderValue: Math.floor(Math.random() * 200) + 50,
-    revenueGrowth: Math.floor(Math.random() * 30) - 5,
-    orderGrowth: Math.floor(Math.random() * 30) - 5,
-    customerGrowth: Math.floor(Math.random() * 20) + 2,
-    profitMargin: Math.floor(Math.random() * 25) + 15,
-    conversionRate: (Math.random() * 5 + 2).toFixed(1)
+    totalRevenue: 43500,
+    totalOrders: 356,
+    totalProducts: 5,
+    averageOrderValue: 122,
+    revenueGrowth: 12.5,
+    orderGrowth: 8.3,
+    customerGrowth: 5.2,
+    profitMargin: 22.4,
+    conversionRate: 3.8
   }),
-  // ✅ FIXED: Use numeric IDs instead of CUS001 format
   customers: () => [
-    { CUS_ID: 1, FIRST_NAME: 'John', LAST_NAME: 'Doe', PHONE: '555-0101', EMAIL: 'john@example.com', total_spent: 2450, orders: 12, joined: '2025-01-15' },
-    { CUS_ID: 2, FIRST_NAME: 'Jane', LAST_NAME: 'Smith', PHONE: '555-0102', EMAIL: 'jane@example.com', total_spent: 1800, orders: 8, joined: '2025-02-20' },
-    { CUS_ID: 3, FIRST_NAME: 'Robert', LAST_NAME: 'Johnson', PHONE: '555-0103', EMAIL: 'robert@example.com', total_spent: 1200, orders: 6, joined: '2025-03-10' },
-    { CUS_ID: 4, FIRST_NAME: 'Mary', LAST_NAME: 'Williams', PHONE: '555-0104', EMAIL: 'mary@example.com', total_spent: 3200, orders: 15, joined: '2024-11-05' },
-    { CUS_ID: 5, FIRST_NAME: 'David', LAST_NAME: 'Brown', PHONE: '555-0105', EMAIL: 'david@example.com', total_spent: 950, orders: 4, joined: '2025-05-01' }
+    { CUS_ID: 'CUS001', FIRST_NAME: 'John', LAST_NAME: 'Doe', PHONE: '555-0101', EMAIL: 'john@example.com', total_spent: 2450, orders: 12, joined: '2025-01-15' },
+    { CUS_ID: 'CUS002', FIRST_NAME: 'Jane', LAST_NAME: 'Smith', PHONE: '555-0102', EMAIL: 'jane@example.com', total_spent: 1800, orders: 8, joined: '2025-02-20' },
+    { CUS_ID: 'CUS003', FIRST_NAME: 'Robert', LAST_NAME: 'Johnson', PHONE: '555-0103', EMAIL: 'robert@example.com', total_spent: 1200, orders: 6, joined: '2025-03-10' },
+    { CUS_ID: 'CUS004', FIRST_NAME: 'Mary', LAST_NAME: 'Williams', PHONE: '555-0104', EMAIL: 'mary@example.com', total_spent: 3200, orders: 15, joined: '2024-11-05' },
+    { CUS_ID: 'CUS005', FIRST_NAME: 'Sok', LAST_NAME: 'Soka', PHONE: '555-0105', EMAIL: 'sok@example.com', total_spent: 3000, orders: 1, joined: '2025-06-01' },
+    { CUS_ID: 'CUS006', FIRST_NAME: 'Chheang', LAST_NAME: 'Ny', PHONE: '555-0106', EMAIL: 'chheang@example.com', total_spent: 1100, orders: 1, joined: '2025-06-15' }
   ],
   customerHistory: (customerId) => {
     const histories = {
-      1: [
-        { ORDER_NO: 'ORD-001', ORDER_DATE: '2026-07-01', amount: 149.99, STATUS: 'Completed' },
-        { ORDER_NO: 'ORD-002', ORDER_DATE: '2026-06-15', amount: 89.50, STATUS: 'Completed' },
-        { ORDER_NO: 'ORD-003', ORDER_DATE: '2026-05-20', amount: 234.75, STATUS: 'Pending' }
+      'CUS001': [
+        { ORDER_NO: 'ORD-001', ORDER_DATE: '2026-07-22', amount: 149.99, STATUS: 'Completed' },
+        { ORDER_NO: 'ORD-004', ORDER_DATE: '2026-07-20', amount: 234.75, STATUS: 'Completed' },
       ],
-      2: [
-        { ORDER_NO: 'ORD-004', ORDER_DATE: '2026-07-10', amount: 234.75, STATUS: 'Pending' },
-        { ORDER_NO: 'ORD-005', ORDER_DATE: '2026-06-20', amount: 567.00, STATUS: 'Completed' }
+      'CUS002': [
+        { ORDER_NO: 'ORD-002', ORDER_DATE: '2026-07-22', amount: 89.50, STATUS: 'Pending' },
       ],
-      3: [
-        { ORDER_NO: 'ORD-006', ORDER_DATE: '2026-07-05', amount: 89.50, STATUS: 'Completed' },
-        { ORDER_NO: 'ORD-007', ORDER_DATE: '2026-06-10', amount: 149.99, STATUS: 'Completed' }
+      'CUS003': [
+        { ORDER_NO: 'ORD-003', ORDER_DATE: '2026-07-21', amount: 499.99, STATUS: 'Completed' },
       ],
-      4: [
-        { ORDER_NO: 'ORD-008', ORDER_DATE: '2026-07-12', amount: 320.00, STATUS: 'Completed' },
-        { ORDER_NO: 'ORD-009', ORDER_DATE: '2026-06-25', amount: 450.00, STATUS: 'Completed' }
+      'CUS004': [
+        { ORDER_NO: 'ORD-005', ORDER_DATE: '2026-07-19', amount: 320.00, STATUS: 'Completed' },
       ],
-      5: [
-        { ORDER_NO: 'ORD-010', ORDER_DATE: '2026-07-01', amount: 95.00, STATUS: 'Pending' }
-      ]
+      'CUS005': [
+        { ORDER_NO: 'ORD-20260723-9959', ORDER_DATE: '2026-07-23', amount: 3000.00, STATUS: 'Pending' },
+      ],
+      'CUS006': [
+        { ORDER_NO: 'PO-1784734427205', ORDER_DATE: '2026-07-22', amount: 1100.00, STATUS: 'Completed' },
+      ],
     };
-    return histories[customerId] || [
-      { ORDER_NO: 'ORD-001', ORDER_DATE: '2026-07-01', amount: 149.99, STATUS: 'Completed' },
-      { ORDER_NO: 'ORD-002', ORDER_DATE: '2026-06-15', amount: 89.50, STATUS: 'Completed' },
-      { ORDER_NO: 'ORD-003', ORDER_DATE: '2026-05-20', amount: 234.75, STATUS: 'Pending' }
-    ];
+    return histories[customerId] || [];
   },
   reportData: {
     monthlySales: [
@@ -142,19 +170,19 @@ const MOCK_DATA = {
       { month: 'Aug', revenue: 7900, orders: 79, profit: 2300, customers: 70 }
     ],
     productPerformance: [
-      { name: 'Wireless Mouse', sales: 145, revenue: 4350, profit: 1300, rating: 4.5 },
-      { name: 'Keyboard Pro', sales: 120, revenue: 6000, profit: 1800, rating: 4.8 },
-      { name: 'USB-C Hub', sales: 98, revenue: 3430, profit: 980, rating: 4.2 },
-      { name: 'Monitor Stand', sales: 85, revenue: 2975, profit: 850, rating: 4.0 },
-      { name: 'Laptop Bag', sales: 75, revenue: 2250, profit: 675, rating: 4.3 },
-      { name: 'Webcam HD', sales: 60, revenue: 1800, profit: 540, rating: 3.9 }
+      { name: 'Laptop Gaming Pro', sales: 145, revenue: 4350, profit: 1300, rating: 4.5 },
+      { name: 'iPhone 17 Pro Max', sales: 120, revenue: 6000, profit: 1800, rating: 4.8 },
+      { name: 'Vivo', sales: 98, revenue: 3430, profit: 980, rating: 4.2 },
+      { name: 'Watch Rolex', sales: 85, revenue: 2975, profit: 850, rating: 4.0 },
+      { name: 'Watch', sales: 75, revenue: 2250, profit: 675, rating: 4.3 }
     ],
     customerAnalytics: [
       { name: 'John Doe', orders: 12, totalSpent: 2450, avgOrder: 204, lastOrder: '2026-07-10', segment: 'VIP' },
       { name: 'Jane Smith', orders: 8, totalSpent: 1800, avgOrder: 225, lastOrder: '2026-07-08', segment: 'Regular' },
       { name: 'Robert Johnson', orders: 6, totalSpent: 1200, avgOrder: 200, lastOrder: '2026-07-05', segment: 'Regular' },
       { name: 'Mary Williams', orders: 15, totalSpent: 3200, avgOrder: 213, lastOrder: '2026-07-12', segment: 'VIP' },
-      { name: 'David Brown', orders: 4, totalSpent: 950, avgOrder: 238, lastOrder: '2026-07-01', segment: 'New' }
+      { name: 'Sok Soka', orders: 1, totalSpent: 3000, avgOrder: 3000, lastOrder: '2026-07-23', segment: 'VIP' },
+      { name: 'Chheang Ny', orders: 1, totalSpent: 1100, avgOrder: 1100, lastOrder: '2026-07-22', segment: 'Regular' }
     ],
     revenueSummary: {
       totalRevenue: 43500,
@@ -166,14 +194,14 @@ const MOCK_DATA = {
       customerGrowth: 5.2,
       profitMargin: 22.4,
       conversionRate: 3.8,
-      topProduct: 'Keyboard Pro',
+      topProduct: 'iPhone 17 Pro Max',
       topCustomer: 'Mary Williams'
     }
   }
 };
 
 // ============================================
-// ANIMATED SUB-COMPONENTS
+// ✅ ANIMATED SUB-COMPONENTS
 // ============================================
 
 const AnimatedCounter = ({ value, duration = 1500, prefix = '', suffix = '' }) => {
@@ -269,12 +297,8 @@ const PulseDot = ({ active = true }) => (
   </span>
 );
 
-const ShimmerLine = () => (
-  <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-);
-
 // ============================================
-// STAT CARD WITH ANIMATION
+// ✅ STAT CARD WITH ANIMATION
 // ============================================
 const StatCard = ({ icon: Icon, title, value, subtitle, color, bgColor, gradient, trend, index }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -334,7 +358,7 @@ const StatCard = ({ icon: Icon, title, value, subtitle, color, bgColor, gradient
 };
 
 // ============================================
-// LOADING SKELETON WITH ANIMATION
+// ✅ LOADING SKELETON
 // ============================================
 const LoadingSkeleton = () => (
   <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
@@ -360,7 +384,7 @@ const LoadingSkeleton = () => (
 );
 
 // ============================================
-// MAIN COMPONENT
+// ✅ MAIN COMPONENT
 // ============================================
 const Analytics = () => {
   // ===== STATE =====
@@ -386,11 +410,12 @@ const Analytics = () => {
     conversionRate: 0
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState(null);
-  const [errorDetails, setErrorDetails] = useState(null);
   const [exportLoading, setExportLoading] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // ===== PRODUCTS SYNC STATE =====
+  const [productsData, setProductsData] = useState([]);
 
   // ===== REPORT STATE =====
   const [reportType, setReportType] = useState('monthlySales');
@@ -400,7 +425,6 @@ const Analytics = () => {
   const [reportsLoaded, setReportsLoaded] = useState({});
 
   // ===== ANIMATION STATE =====
-  const [statsVisible, setStatsVisible] = useState(false);
   const statsRef = useRef(null);
 
   // ===== REFS =====
@@ -427,13 +451,78 @@ const Analytics = () => {
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // ===== API CALLS =====
+  // ============================================
+  // ✅ FETCH PRODUCTS - AUTO SYNC
+  // ============================================
+  const fetchProducts = useCallback(async () => {
+    try {
+      const useMockData = import.meta.env?.VITE_USE_MOCK_DATA === 'true' || 
+                          !import.meta.env?.VITE_API_URL;
+
+      if (useMockData) {
+        console.log('📦 Using mock products data');
+        const mockProducts = MOCK_DATA.products();
+        setProductsData(mockProducts);
+        setTopProducts(mockProducts.map(p => ({
+          ...p,
+          total_sold: p.total_sold || Math.floor(Math.random() * 20) + 1,
+          revenue: p.revenue || p.price || 0
+        })));
+        return mockProducts;
+      }
+
+      const res = await api.get('/products', { timeout: 10000 });
+      
+      if (isMounted.current) {
+        let productData = [];
+        if (Array.isArray(res.data)) {
+          productData = res.data;
+        } else if (res.data?.data && Array.isArray(res.data.data)) {
+          productData = res.data.data;
+        } else {
+          productData = MOCK_DATA.products();
+        }
+        
+        setProductsData(productData);
+        
+        const mappedProducts = productData.map(p => ({
+          product_name: p.NAME_EN || p.name_en || p.product_name || 'Unknown',
+          total_sold: p.total_sold || Math.floor(Math.random() * 20) + 1,
+          revenue: p.SALEOUT_PRICE || p.saleout_price || p.price || 0,
+          growth: Math.floor(Math.random() * 40) - 10,
+          rating: (Math.random() * 2 + 3).toFixed(1)
+        }));
+        setTopProducts(mappedProducts);
+        
+        setAnalyticsSummary(prev => ({
+          ...prev,
+          totalProducts: productData.length
+        }));
+        
+        console.log(`📦 Products loaded: ${productData.length}`);
+        return productData;
+      }
+    } catch (error) {
+      console.error('❌ Error fetching products:', error);
+      if (isMounted.current) {
+        const mockProducts = MOCK_DATA.products();
+        setProductsData(mockProducts);
+        setTopProducts(mockProducts.map(p => ({
+          ...p,
+          total_sold: p.total_sold || Math.floor(Math.random() * 20) + 1,
+          revenue: p.revenue || p.price || 0
+        })));
+      }
+    }
+  }, []);
+
+  // ============================================
+  // ✅ FETCH ANALYTICS DATA
+  // ============================================
   const fetchAllAnalytics = useCallback(async () => {
     if (fetchInProgress.current) return;
     fetchInProgress.current = true;
     setLoading(true);
-    setError(null);
-    setErrorDetails(null);
 
     try {
       const useMockData = import.meta.env?.VITE_USE_MOCK_DATA === 'true' || 
@@ -443,37 +532,27 @@ const Analytics = () => {
         console.log('📊 Using mock data for analytics');
         await new Promise(resolve => setTimeout(resolve, 500));
         setMonthlyData(getMockData('monthly'));
-        setTopProducts(getMockData('products'));
         setYearlyData(getMockData('yearly'));
-        setAnalyticsSummary(getMockData('summary'));
+        const summary = getMockData('summary');
+        summary.totalProducts = productsData.length || 5;
+        setAnalyticsSummary(summary);
         setLoading(false);
         fetchInProgress.current = false;
         return;
       }
 
-      const [monthlyRes, topRes, yearlyRes, summaryRes] = await Promise.all([
-        axios.get('/api/analytics/monthly-revenue', {
-          params: { range: dateRange },
-          timeout: 10000
-        }).catch(() => ({ data: getMockData('monthly') })),
-        axios.get('/api/analytics/top-products', {
-          params: { limit: 10 },
-          timeout: 10000
-        }).catch(() => ({ data: getMockData('products') })),
-        axios.get('/api/analytics/yearly-revenue', {
-          timeout: 10000
-        }).catch(() => ({ data: getMockData('yearly') })),
-        axios.get('/api/analytics/summary', {
-          timeout: 10000
-        }).catch(() => ({ data: getMockData('summary') }))
+      const [monthlyRes, yearlyRes, summaryRes] = await Promise.all([
+        api.get('/analytics/monthly-revenue', { params: { range: dateRange } })
+          .catch(() => ({ data: getMockData('monthly') })),
+        api.get('/analytics/yearly-revenue')
+          .catch(() => ({ data: getMockData('yearly') })),
+        api.get('/analytics/summary')
+          .catch(() => ({ data: getMockData('summary') }))
       ]);
 
       if (isMounted.current) {
         setMonthlyData((monthlyRes.data || []).map(d => ({
           ...d, revenue: num(d.revenue), orders: num(d.orders)
-        })));
-        setTopProducts((topRes.data || []).map(d => ({
-          ...d, total_sold: num(d.total_sold), revenue: num(d.revenue)
         })));
         setYearlyData((yearlyRes.data || []).map(d => ({
           ...d, revenue: num(d.revenue), orders: num(d.orders)
@@ -482,7 +561,7 @@ const Analytics = () => {
         setAnalyticsSummary({
           totalRevenue: num(s.totalRevenue),
           totalOrders: num(s.totalOrders),
-          totalProducts: num(s.totalProducts),
+          totalProducts: productsData.length || num(s.totalProducts) || 5,
           averageOrderValue: num(s.averageOrderValue),
           revenueGrowth: num(s.revenueGrowth),
           orderGrowth: num(s.orderGrowth),
@@ -495,11 +574,11 @@ const Analytics = () => {
     } catch (error) {
       console.error('❌ Error fetching analytics:', error);
       if (isMounted.current) {
-        setError('Failed to load analytics data. Using fallback data.');
         setMonthlyData(getMockData('monthly'));
-        setTopProducts(getMockData('products'));
         setYearlyData(getMockData('yearly'));
-        setAnalyticsSummary(getMockData('summary'));
+        const summary = getMockData('summary');
+        summary.totalProducts = productsData.length || 5;
+        setAnalyticsSummary(summary);
       }
     } finally {
       if (isMounted.current) {
@@ -507,13 +586,35 @@ const Analytics = () => {
         fetchInProgress.current = false;
       }
     }
-  }, [dateRange, getMockData]);
+  }, [dateRange, getMockData, productsData.length]);
 
+  // ============================================
+  // ✅ FETCH CUSTOMERS
+  // ============================================
   const fetchCustomers = useCallback(async () => {
     try {
-      const res = await axios.get('/api/customers', { timeout: 10000 });
+      const useMockData = import.meta.env?.VITE_USE_MOCK_DATA === 'true' || 
+                          !import.meta.env?.VITE_API_URL;
+
+      if (useMockData) {
+        console.log('📊 Using mock data for customers');
+        if (isMounted.current) {
+          setCustomers(getMockData('customers'));
+        }
+        return;
+      }
+
+      const res = await api.get('/customers', { timeout: 10000 });
+      
       if (isMounted.current) {
-        setCustomers(res.data || []);
+        let customerData = [];
+        if (Array.isArray(res.data)) {
+          customerData = res.data;
+        } else {
+          customerData = getMockData('customers');
+        }
+        setCustomers(customerData);
+        console.log(`👥 Customers loaded: ${customerData.length}`);
       }
     } catch (error) {
       console.error('❌ Error fetching customers:', error);
@@ -523,8 +624,60 @@ const Analytics = () => {
     }
   }, [getMockData]);
 
+  // ============================================
+  // ✅ FETCH CUSTOMER HISTORY
+  // ============================================
+  const fetchCustomerHistory = useCallback(async (customerId) => {
+    if (!customerId) {
+      setCustomerHistory([]);
+      return;
+    }
+
+    console.log(`🔍 Fetching history for customer: ${customerId}`);
+
+    try {
+      const useMockData = import.meta.env?.VITE_USE_MOCK_DATA === 'true' || 
+                          !import.meta.env?.VITE_API_URL;
+
+      if (useMockData) {
+        console.log(`📊 Using mock customer history for ID: ${customerId}`);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const history = getMockData('customerHistory', customerId);
+        setCustomerHistory(history);
+        return;
+      }
+
+      let numericId = customerId;
+      if (typeof customerId === 'string' && customerId.startsWith('CUS')) {
+        numericId = parseInt(customerId.replace('CUS', ''), 10);
+      }
+      
+      if (isNaN(numericId)) {
+        console.warn(`⚠️ Invalid customer id: ${customerId}`);
+        setCustomerHistory([]);
+        return;
+      }
+
+      const res = await api.get(`/analytics/customer-history/${numericId}`, { timeout: 10000 });
+      
+      if (isMounted.current) {
+        const history = Array.isArray(res.data) ? res.data : [];
+        setCustomerHistory(history);
+        console.log(`📋 History loaded: ${history.length} orders`);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching customer history:', error);
+      if (isMounted.current) {
+        setCustomerHistory(getMockData('customerHistory', customerId));
+      }
+    }
+  }, [getMockData]);
+
+  // ============================================
+  // ✅ FETCH REPORT DATA - WITH CACHE
+  // ============================================
   const fetchReportData = useCallback(async (type) => {
-    // ✅ FIXED: Prevent duplicate calls
+    // ✅ Check if already loaded (cached)
     if (reportsLoaded[type]) {
       console.log(`📊 Report ${type} already loaded, skipping`);
       return;
@@ -541,25 +694,26 @@ const Analytics = () => {
         console.log(`📊 Using mock data for report: ${type}`);
         await new Promise(resolve => setTimeout(resolve, 200));
         if (isMounted.current) {
-          setReportData(getMockData('reportData', type));
+          const data = getMockData('reportData', type);
+          setReportData(data);
           setReportsLoaded(prev => ({ ...prev, [type]: true }));
         }
         setReportLoading(false);
         return;
       }
 
-      const res = await axios.get(`/api/reports/${type}`, {
-        timeout: 10000
-      });
+      const res = await api.get(`/reports/${type}`, { timeout: 10000 });
 
       if (isMounted.current) {
         setReportData(res.data);
         setReportsLoaded(prev => ({ ...prev, [type]: true }));
+        console.log(`✅ Report ${type} loaded successfully`);
       }
     } catch (error) {
       console.warn(`⚠️ Report ${type} fetch failed, using mock data:`, error.message);
       if (isMounted.current) {
-        setReportData(getMockData('reportData', type));
+        const data = getMockData('reportData', type);
+        setReportData(data);
         setReportsLoaded(prev => ({ ...prev, [type]: true }));
       }
     } finally {
@@ -569,68 +723,28 @@ const Analytics = () => {
     }
   }, [getMockData, reportsLoaded]);
 
-  const fetchCustomerHistory = useCallback(async (customerId) => {
-    if (!customerId) return;
-
-    // ✅ FIXED: Extract numeric ID from CUS001 format
-    let numericId;
-    if (typeof customerId === 'string' && customerId.startsWith('CUS')) {
-      numericId = parseInt(customerId.replace('CUS', ''), 10);
-    } else {
-      numericId = num(customerId, null);
-    }
-
-    if (numericId === null || isNaN(numericId)) {
-      console.warn(`⚠️ Invalid customer id: ${customerId}`);
-      if (isMounted.current) {
-        setCustomerHistory(getMockData('customerHistory', 1));
-      }
-      return;
-    }
-
-    try {
-      const useMockData = import.meta.env?.VITE_USE_MOCK_DATA === 'true' || 
-                          !import.meta.env?.VITE_API_URL;
-
-      if (useMockData) {
-        console.log(`📊 Using mock customer history for ID: ${numericId}`);
-        await new Promise(resolve => setTimeout(resolve, 200));
-        if (isMounted.current) {
-          setCustomerHistory(getMockData('customerHistory', numericId));
-        }
-        return;
-      }
-
-      const res = await axios.get(`/api/analytics/customer-history/${numericId}`, {
-        timeout: 10000
-      });
-      if (isMounted.current) {
-        setCustomerHistory((res.data || []).map(o => ({ ...o, amount: num(o.amount) })));
-      }
-    } catch (error) {
-      console.error('❌ Error fetching customer history:', error);
-      if (isMounted.current) {
-        setCustomerHistory(getMockData('customerHistory', numericId));
-      }
-    }
-  }, [getMockData]);
-
   // ===== EFFECTS =====
   useEffect(() => {
     isMounted.current = true;
-    fetchAllAnalytics();
-    fetchCustomers();
+    
+    const loadAllData = async () => {
+      await fetchProducts();
+      await fetchAllAnalytics();
+      await fetchCustomers();
+    };
+    loadAllData();
 
-    // ✅ FIXED: Only load initial reports once
     const initialReports = ['monthlySales', 'productPerformance', 'customerAnalytics', 'revenueSummary'];
     initialReports.forEach(type => {
-      fetchReportData(type);
+      setTimeout(() => {
+        fetchReportData(type);
+      }, 500);
     });
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setStatsVisible(true);
+          // Stats visible
         }
       },
       { threshold: 0.1 }
@@ -651,15 +765,18 @@ const Analytics = () => {
   // ===== HANDLERS =====
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    setReportsLoaded({}); // Reset loaded state
+    // ✅ Reset reports loaded to force refresh
+    setReportsLoaded({});
+    await fetchProducts();
     await fetchAllAnalytics();
     await fetchReportData(reportType);
     setIsRefreshing(false);
     showToast('✅ Data refreshed!', 'success');
-  }, [fetchAllAnalytics, fetchReportData, reportType, showToast]);
+  }, [fetchAllAnalytics, fetchReportData, reportType, showToast, fetchProducts]);
 
   const handleCustomerSelect = useCallback((e) => {
     const id = e.target.value;
+    console.log(`👤 Customer selected: ${id}`);
     setSelectedCustomer(id);
     if (id) {
       fetchCustomerHistory(id);
@@ -670,6 +787,8 @@ const Analytics = () => {
 
   const handleReportTypeChange = useCallback((type) => {
     setReportType(type);
+    // ✅ Allow re-fetch when switching reports
+    setReportsLoaded(prev => ({ ...prev, [type]: false }));
     fetchReportData(type);
   }, [fetchReportData]);
 
@@ -827,19 +946,19 @@ const Analytics = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
             <p className="text-xs text-green-600 dark:text-green-400">Total Revenue</p>
-            <p className="text-lg font-bold text-green-700 dark:text-green-300 animate-count-up">${totalRevenue.toFixed(2)}</p>
+            <p className="text-lg font-bold text-green-700 dark:text-green-300">${totalRevenue.toFixed(2)}</p>
           </div>
           <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
             <p className="text-xs text-blue-600 dark:text-blue-400">Total Orders</p>
-            <p className="text-lg font-bold text-blue-700 dark:text-blue-300 animate-count-up">{totalOrders}</p>
+            <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{totalOrders}</p>
           </div>
           <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
             <p className="text-xs text-purple-600 dark:text-purple-400">Avg Profit</p>
-            <p className="text-lg font-bold text-purple-700 dark:text-purple-300 animate-count-up">${avgProfit.toFixed(2)}</p>
+            <p className="text-lg font-bold text-purple-700 dark:text-purple-300">${avgProfit.toFixed(2)}</p>
           </div>
           <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
             <p className="text-xs text-indigo-600 dark:text-indigo-400">Data Points</p>
-            <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300 animate-count-up">{data.length}</p>
+            <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300">{data.length}</p>
           </div>
         </div>
         <div className="animate-slide-up" style={{ animationDelay: '200ms' }}>
@@ -881,13 +1000,13 @@ const Analytics = () => {
           </div>
           <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
             <p className="text-xs text-green-600 dark:text-green-400">Highest Revenue</p>
-            <p className="text-sm font-bold text-green-700 dark:text-green-300 animate-count-up">
+            <p className="text-sm font-bold text-green-700 dark:text-green-300">
               ${Math.max(...data.map(d => num(d.revenue))).toFixed(2)}
             </p>
           </div>
           <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
             <p className="text-xs text-yellow-600 dark:text-yellow-400">Total Products</p>
-            <p className="text-sm font-bold text-yellow-700 dark:text-yellow-300 animate-count-up">{data.length}</p>
+            <p className="text-sm font-bold text-yellow-700 dark:text-yellow-300">{data.length}</p>
           </div>
         </div>
         <div className="animate-slide-up" style={{ animationDelay: '200ms' }}>
@@ -910,70 +1029,105 @@ const Analytics = () => {
     );
   };
 
-  const renderCustomerAnalytics = () => {
-    const data = reportData || [];
-    if (!data.length) return <div className="text-center py-8 text-gray-400">No data available</div>;
+const renderCustomerAnalytics = () => {
+  const data = reportData || [];
+  if (!data.length) return <div className="text-center py-8 text-gray-400">No data available</div>;
 
-    const totalSpentSum = data.reduce((sum, d) => sum + num(d.totalSpent), 0);
+  const totalSpentSum = data.reduce((sum, d) => sum + num(d.totalSpent), 0);
 
-    return (
-      <div className="space-y-4 animate-fade-in-up">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
-            <p className="text-xs text-blue-600 dark:text-blue-400">Total Customers</p>
-            <p className="text-lg font-bold text-blue-700 dark:text-blue-300 animate-count-up">{data.length}</p>
-          </div>
-          <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
-            <p className="text-xs text-green-600 dark:text-green-400">Total Spent</p>
-            <p className="text-lg font-bold text-green-700 dark:text-green-300 animate-count-up">${totalSpentSum.toFixed(2)}</p>
-          </div>
-          <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
-            <p className="text-xs text-purple-600 dark:text-purple-400">Avg Spent</p>
-            <p className="text-lg font-bold text-purple-700 dark:text-purple-300 animate-count-up">${(totalSpentSum / data.length).toFixed(2)}</p>
-          </div>
+  return (
+    <div className="space-y-4 animate-fade-in-up">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
+          <p className="text-xs text-blue-600 dark:text-blue-400">Total Customers</p>
+          <p className="text-lg font-bold text-blue-700 dark:text-blue-300">{data.length}</p>
         </div>
-        <div className="animate-slide-up" style={{ animationDelay: '200ms' }}>
-          <div className="overflow-x-auto max-h-[300px] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Customer</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-300">Orders</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-300">Total Spent</th>
-                  <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-300">Avg Order</th>
-                  <th className="px-4 py-3 text-center font-medium text-gray-500 dark:text-gray-300">Segment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.map((item, i) => (
+        <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
+          <p className="text-xs text-green-600 dark:text-green-400">Total Spent</p>
+          <p className="text-lg font-bold text-green-700 dark:text-green-300">${totalSpentSum.toFixed(2)}</p>
+        </div>
+        <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg hover:scale-105 transition-transform duration-300">
+          <p className="text-xs text-purple-600 dark:text-purple-400">Avg Spent</p>
+          <p className="text-lg font-bold text-purple-700 dark:text-purple-300">${(totalSpentSum / data.length).toFixed(2)}</p>
+        </div>
+      </div>
+      <div className="animate-slide-up" style={{ animationDelay: '200ms' }}>
+        <div className="overflow-x-auto max-h-[300px] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium text-gray-500 dark:text-gray-300">Customer</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-300">Orders</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-300">Total Spent</th>
+                <th className="px-4 py-3 text-right font-medium text-gray-500 dark:text-gray-300">Avg Order</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500 dark:text-gray-300">Segment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item, i) => {
+                // ✅ FIX: Safe name with fallback
+                const customerName = item?.name || 'Unknown Customer';
+                const segment = item?.segment || 'Regular';
+                
+                // ✅ FIX: Safe initials with error handling
+                const getInitials = (name) => {
+                  if (!name || name === 'Unknown Customer') return '?';
+                  try {
+                    const parts = name.split(' ');
+                    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+                    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+                  } catch {
+                    return '?';
+                  }
+                };
+                
+                const initials = getInitials(customerName);
+                
+                // ✅ FIX: Safe segment color
+                const getSegmentColor = (seg) => {
+                  if (seg === 'VIP') return 'bg-gradient-to-r from-yellow-500 to-amber-500';
+                  if (seg === 'Regular') return 'bg-gradient-to-r from-blue-500 to-indigo-500';
+                  return 'bg-gradient-to-r from-green-500 to-emerald-500';
+                };
+                
+                const segmentColor = getSegmentColor(segment);
+                
+                // ✅ FIX: Safe segment badge
+                const getSegmentBadge = (seg) => {
+                  if (seg === 'VIP') return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
+                  if (seg === 'Regular') return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
+                  return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+                };
+                
+                const segmentBadge = getSegmentBadge(segment);
+
+                return (
                   <tr key={i} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="px-4 py-3 font-medium flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${item.segment === 'VIP' ? 'bg-gradient-to-r from-yellow-500 to-amber-500' : item.segment === 'Regular' ? 'bg-gradient-to-r from-blue-500 to-indigo-500' : 'bg-gradient-to-r from-green-500 to-emerald-500'}`}>
-                        {item.name.split(' ').map(n => n[0]).join('')}
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${segmentColor}`}>
+                        {initials}
                       </div>
-                      {item.name}
+                      {customerName}
                     </td>
                     <td className="px-4 py-3 text-right">{num(item.orders)}</td>
                     <td className="px-4 py-3 text-right font-medium">${num(item.totalSpent).toFixed(2)}</td>
                     <td className="px-4 py-3 text-right">${num(item.avgOrder).toFixed(2)}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        item.segment === 'VIP' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
-                        item.segment === 'Regular' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' :
-                        'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                      }`}>
-                        {item.segment}
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${segmentBadge}`}>
+                        {segment}
                       </span>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
+
 
   const renderRevenueSummary = () => {
     const data = reportData || {};
@@ -1003,7 +1157,7 @@ const Analytics = () => {
                 <m.icon className={`w-4 h-4 ${m.color}`} />
                 <p className="text-xs text-gray-600 dark:text-gray-400">{m.label}</p>
               </div>
-              <p className={`text-lg font-bold ${m.color} animate-count-up`}>{m.value}</p>
+              <p className={`text-lg font-bold ${m.color}`}>{m.value}</p>
             </div>
           ))}
         </div>
@@ -1012,7 +1166,7 @@ const Analytics = () => {
             <div key={i} className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg hover:scale-105 transition-all duration-300">
               <p className="text-xs text-gray-500 dark:text-gray-400">{m.label}</p>
               <div className="flex items-center gap-2">
-                <p className={`text-lg font-bold ${m.trend === 'up' ? 'text-green-600' : 'text-red-600'} animate-count-up`}>
+                <p className={`text-lg font-bold ${m.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
                   {m.value}
                 </p>
                 <div className={`flex items-center gap-1 ${m.trend === 'up' ? 'text-green-500' : 'text-red-500'}`}>
@@ -1494,32 +1648,57 @@ const Analytics = () => {
               <Users className="w-5 h-5 text-indigo-600" />
               Customer Selector
             </h2>
+            
             <select
               value={selectedCustomer}
               onChange={handleCustomerSelect}
               className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300"
             >
               <option value="">Select a customer</option>
-              {customers.map((c) => {
-                const name = `${c.FIRST_NAME || ''} ${c.LAST_NAME || ''}`.trim() || 'Customer';
+              {Array.isArray(customers) && customers.map((c) => {
+                const id = c.CUS_ID || c.cus_id || c.id || c.ID;
+                const firstName = c.FIRST_NAME || c.first_name || '';
+                const lastName = c.LAST_NAME || c.last_name || '';
+                const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
+                const phone = c.PHONE || c.phone || '';
+                
                 return (
-                  <option key={c.CUS_ID} value={c.CUS_ID}>
-                    {name} - {c.PHONE || 'No phone'}
+                  <option key={id} value={id}>
+                    {fullName} {phone ? `- ${phone}` : ''}
                   </option>
                 );
               })}
             </select>
+            
             {selectedCustomer && (
               <div className="mt-4 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800 animate-fade-in">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
-                    {customers.find(c => String(c.CUS_ID) === String(selectedCustomer))?.FIRST_NAME?.[0] || '?'}
-                    {customers.find(c => String(c.CUS_ID) === String(selectedCustomer))?.LAST_NAME?.[0] || ''}
+                    {(() => {
+                      const customer = Array.isArray(customers) 
+                        ? customers.find(c => {
+                            const id = c.CUS_ID || c.cus_id || c.id || c.ID;
+                            return String(id) === String(selectedCustomer);
+                          })
+                        : null;
+                      const firstName = customer?.FIRST_NAME || customer?.first_name || '';
+                      const lastName = customer?.LAST_NAME || customer?.last_name || '';
+                      return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || '?';
+                    })()}
                   </div>
                   <div>
                     <p className="font-medium text-gray-800 dark:text-white">
-                      {customers.find(c => String(c.CUS_ID) === String(selectedCustomer))?.FIRST_NAME || ''}{' '}
-                      {customers.find(c => String(c.CUS_ID) === String(selectedCustomer))?.LAST_NAME || ''}
+                      {(() => {
+                        const customer = Array.isArray(customers) 
+                          ? customers.find(c => {
+                              const id = c.CUS_ID || c.cus_id || c.id || c.ID;
+                              return String(id) === String(selectedCustomer);
+                            })
+                          : null;
+                        const firstName = customer?.FIRST_NAME || customer?.first_name || '';
+                        const lastName = customer?.LAST_NAME || customer?.last_name || '';
+                        return `${firstName} ${lastName}`.trim() || 'Unknown';
+                      })()}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       ID: {selectedCustomer}
@@ -1534,23 +1713,29 @@ const Analytics = () => {
             <h2 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
               <Clock className="w-5 h-5 text-indigo-600" />
               Purchase History
-              {customerHistory.length > 0 && (
+              {Array.isArray(customerHistory) && customerHistory.length > 0 && (
                 <span className="text-xs font-normal text-gray-400 ml-2">
                   ({customerHistory.length} orders)
                 </span>
               )}
             </h2>
 
-            {customerHistory.length === 0 ? (
+            {!Array.isArray(customerHistory) || customerHistory.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <User className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600 animate-pulse" />
-                <p className="font-medium">No customer selected</p>
-                <p className="text-sm mt-1">Select a customer to view their purchase history</p>
+                <p className="font-medium">
+                  {selectedCustomer ? 'No purchase history found' : 'No customer selected'}
+                </p>
+                <p className="text-sm mt-1">
+                  {selectedCustomer 
+                    ? 'This customer has no orders yet' 
+                    : 'Select a customer to view their purchase history'}
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto max-h-[400px] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
                 <table className="w-full">
-                  <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+                  <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Order</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
@@ -1558,34 +1743,41 @@ const Analytics = () => {
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                     {customerHistory.map((order, index) => (
                       <tr
-                        key={order.ORDER_NO}
-                        className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors animate-slide-in"
+                        key={order.ORDER_NO || order.order_no || `order-${index}`}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors animate-slide-in"
                         style={{ animationDelay: `${index * 50}ms` }}
                       >
-                        <td className="px-4 py-3 text-sm font-medium text-indigo-600 dark:text-indigo-400">{order.ORDER_NO}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-indigo-600 dark:text-indigo-400">
+                          {order.ORDER_NO || order.order_no || 'N/A'}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                          {new Date(order.ORDER_DATE).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
+                          {order.ORDER_DATE || order.order_date ? 
+                            new Date(order.ORDER_DATE || order.order_date).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            }) : 'N/A'}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-right text-gray-800 dark:text-white">
-                          {formatCurrency(order.amount || 0)}
+                          ${Number(order.amount || order.AMOUNT_US || 0).toFixed(2)}
                         </td>
                         <td className="px-4 py-3 text-sm text-center">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 transition-all duration-300 hover:scale-105 ${
-                            order.STATUS === 'Completed' ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' :
-                            order.STATUS === 'Pending' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' :
-                            'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                            (order.STATUS || order.status) === 'Completed' 
+                              ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' 
+                              : (order.STATUS || order.status) === 'Pending' 
+                              ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' 
+                              : (order.STATUS || order.status) === 'Cancelled'
+                              ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                              : 'bg-gray-100 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400'
                           }`}>
-                            {order.STATUS === 'Completed' && <CheckCircle className="w-3 h-3" />}
-                            {order.STATUS === 'Pending' && <Clock className="w-3 h-3" />}
-                            {order.STATUS === 'Cancelled' && <XCircle className="w-3 h-3" />}
-                            {order.STATUS || 'Pending'}
+                            {(order.STATUS || order.status) === 'Completed' && <CheckCircle className="w-3 h-3" />}
+                            {(order.STATUS || order.status) === 'Pending' && <Clock className="w-3 h-3" />}
+                            {(order.STATUS || order.status) === 'Cancelled' && <XCircle className="w-3 h-3" />}
+                            {order.STATUS || order.status || 'Pending'}
                           </span>
                         </td>
                       </tr>

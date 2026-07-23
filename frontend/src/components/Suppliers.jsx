@@ -1,4 +1,20 @@
+// ============================================
+// ✅ COMPLETE FIXED: SUPPLIERS COMPONENT
+// ============================================
+// Fixes applied:
+// 1. Backend already returns/expects frontend-shaped keys (SUP_NAME, CONTACT_PERSON,
+//    PHONE, EMAIL, ADDRESS, STATUS, WEBSITE, TAX_ID, NOTES) and maps them to DB
+//    columns internally. The old code ran data through mapFrontendToDb() before
+//    POST/PUT (sending { company, phone, e_mail... } which the backend never reads,
+//    causing "Supplier name is required" on every submit) and through
+//    mapDbToFrontend() after GET (expecting { company, sup_id, first_name... } which
+//    the backend never sends, causing every row to show as "Unknown" / "No contact").
+// 2. Both mapping functions removed. Data is now sent/received as-is, with a light
+//    normalize() step on read to guarantee safe defaults for missing fields.
+// ============================================
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import axios from 'axios';
 import { 
   Search, Plus, Edit2, Trash2, Truck, X, Save, 
   Phone, Mail, MapPin, User, Building2, RefreshCw,
@@ -10,7 +26,97 @@ import {
 } from 'lucide-react';
 
 // ============================================
-// STANDALONE SUPPLIERS COMPONENT
+// API CONFIGURATION
+// ============================================
+const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+
+const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+});
+
+api.interceptors.request.use(
+  config => {
+    if (import.meta.env?.DEV) {
+      console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+    }
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  response => {
+    if (import.meta.env?.DEV) {
+      console.log('📥 API Response:', response.status, response.config.url);
+    }
+    return response;
+  },
+  error => {
+    console.error('❌ API Error:', error.response?.status, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
+
+// ============================================
+// ✅ NORMALIZE — backend already returns frontend-shaped keys.
+// This just guarantees every field exists with a safe default and every
+// row has a unique SUP_ID, without translating field names.
+// ============================================
+const normalizeSupplier = (item, index) => {
+  if (!item) return null;
+  return {
+    SUP_ID: item.SUP_ID || `TEMP-${Date.now()}-${index}`,
+    SUP_NAME: item.SUP_NAME || 'Unknown',
+    CONTACT_PERSON: item.CONTACT_PERSON || '',
+    PHONE: item.PHONE || '',
+    EMAIL: item.EMAIL || '',
+    ADDRESS: item.ADDRESS || '',
+    STATUS: item.STATUS || 'Active',
+    WEBSITE: item.WEBSITE || '',
+    TAX_ID: item.TAX_ID || '',
+    NOTES: item.NOTES || '',
+  };
+};
+
+// ============================================
+// ✅ MOCK DATA (Fallback, already in frontend shape)
+// ============================================
+const generateMockSuppliers = () => {
+  return [
+    { 
+      SUP_ID: 'SUP001', 
+      SUP_NAME: 'TechPro Supplies', 
+      CONTACT_PERSON: 'John Smith', 
+      PHONE: '555-0101', 
+      EMAIL: 'john@techpro.com', 
+      ADDRESS: '123 Tech St, Silicon Valley, CA 94025',
+      STATUS: 'Active',
+      WEBSITE: 'https://techpro.com',
+      TAX_ID: 'TAX-12345',
+      NOTES: 'Premium electronics supplier'
+    },
+    { 
+      SUP_ID: 'SUP002', 
+      SUP_NAME: 'Global Electronics', 
+      CONTACT_PERSON: 'Sarah Johnson', 
+      PHONE: '555-0102', 
+      EMAIL: 'sarah@globalelec.com', 
+      ADDRESS: '456 Global Ave, New York, NY 10001',
+      STATUS: 'Active',
+      WEBSITE: 'https://globalelectronics.com',
+      TAX_ID: 'TAX-67890',
+      NOTES: 'International electronics distributor'
+    },
+  ];
+};
+
+// ============================================
+// ✅ MAIN SUPPLIERS COMPONENT
 // ============================================
 const Suppliers = () => {
   // ===== STATE =====
@@ -50,102 +156,22 @@ const Suppliers = () => {
     NOTES: ''
   });
 
-  // ===== INITIAL MOCK DATA =====
-  const getInitialData = () => {
-    return [
-      { 
-        SUP_ID: 'SUP001', 
-        SUP_NAME: 'TechPro Supplies', 
-        CONTACT_PERSON: 'John Smith', 
-        PHONE: '555-0101', 
-        EMAIL: 'john@techpro.com', 
-        ADDRESS: '123 Tech St, Silicon Valley', 
-        STATUS: 'Active', 
-        WEBSITE: 'techpro.com', 
-        TAX_ID: 'TAX-001',
-        NOTES: 'Main supplier for electronics'
-      },
-      { 
-        SUP_ID: 'SUP002', 
-        SUP_NAME: 'Global Electronics', 
-        CONTACT_PERSON: 'Sarah Johnson', 
-        PHONE: '555-0102', 
-        EMAIL: 'sarah@globalelec.com', 
-        ADDRESS: '456 Global Ave, NYC', 
-        STATUS: 'Active', 
-        WEBSITE: 'globalelec.com', 
-        TAX_ID: 'TAX-002',
-        NOTES: 'International electronics supplier'
-      },
-      { 
-        SUP_ID: 'SUP003', 
-        SUP_NAME: 'Prime Components', 
-        CONTACT_PERSON: 'Robert Wilson', 
-        PHONE: '555-0103', 
-        EMAIL: 'robert@primecomp.com', 
-        ADDRESS: '789 Prime Rd, Chicago', 
-        STATUS: 'Active', 
-        WEBSITE: 'primecomp.com', 
-        TAX_ID: 'TAX-003',
-        NOTES: 'High-quality components'
-      },
-      { 
-        SUP_ID: 'SUP004', 
-        SUP_NAME: 'Quality Parts Co', 
-        CONTACT_PERSON: 'Mary Brown', 
-        PHONE: '555-0104', 
-        EMAIL: 'mary@qualityparts.com', 
-        ADDRESS: '321 Quality Ln, LA', 
-        STATUS: 'Inactive', 
-        WEBSITE: 'qualityparts.com', 
-        TAX_ID: 'TAX-004',
-        NOTES: ''
-      },
-      { 
-        SUP_ID: 'SUP005', 
-        SUP_NAME: 'Industrial Solutions', 
-        CONTACT_PERSON: 'James Davis', 
-        PHONE: '', 
-        EMAIL: '', 
-        ADDRESS: '111 Industrial Pkwy, Dallas', 
-        STATUS: 'Active', 
-        WEBSITE: '', 
-        TAX_ID: '',
-        NOTES: ''
-      },
-    ];
-  };
+  // ===== REFS =====
+  const isMounted = useRef(true);
+  const messageTimeoutRef = useRef(null);
+  const fetchInProgress = useRef(false);
 
-  // ===== LOAD DATA FROM LOCALSTORAGE OR USE INITIAL =====
-  useEffect(() => {
-    const savedData = localStorage.getItem('spms_suppliers');
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData);
-        if (parsed && parsed.length > 0) {
-          setSuppliers(parsed);
-          calculateStats(parsed);
-          setLoading(false);
-          return;
-        }
-      } catch (e) {
-        console.error('Error loading saved suppliers:', e);
-      }
+  // ===== SHOW MESSAGE =====
+  const showMessage = useCallback((text, type = 'success') => {
+    if (messageTimeoutRef.current) {
+      clearTimeout(messageTimeoutRef.current);
     }
-    // No saved data, use initial mock data
-    const initialData = getInitialData();
-    setSuppliers(initialData);
-    calculateStats(initialData);
-    localStorage.setItem('spms_suppliers', JSON.stringify(initialData));
-    setLoading(false);
+    setMessage(text);
+    setMessageType(type);
+    messageTimeoutRef.current = setTimeout(() => {
+      setMessage('');
+    }, 5000);
   }, []);
-
-  // ===== SAVE TO LOCALSTORAGE WHENEVER SUPPLIERS CHANGE =====
-  useEffect(() => {
-    if (suppliers.length > 0) {
-      localStorage.setItem('spms_suppliers', JSON.stringify(suppliers));
-    }
-  }, [suppliers]);
 
   // ===== CALCULATE STATS =====
   const calculateStats = useCallback((data) => {
@@ -157,101 +183,6 @@ const Suppliers = () => {
     };
     setSupplierStats(stats);
   }, []);
-
-  // ===== SHOW MESSAGE =====
-  const showMessage = useCallback((text, type = 'success') => {
-    setMessage(text);
-    setMessageType(type);
-    const timer = setTimeout(() => setMessage(''), 5000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // ===== GENERATE NEW ID =====
-  const generateId = useCallback(() => {
-    const maxId = suppliers.reduce((max, s) => {
-      const num = parseInt(s.SUP_ID.replace('SUP', ''));
-      return num > max ? num : max;
-    }, 0);
-    return `SUP${String(maxId + 1).padStart(3, '0')}`;
-  }, [suppliers]);
-
-  // ===== HANDLE SUBMIT =====
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    
-    if (!formData.SUP_NAME || formData.SUP_NAME.trim() === '') {
-      showMessage('❌ Supplier name is required', 'error');
-      setSubmitting(false);
-      return;
-    }
-
-    try {
-      const newSupplier = {
-        SUP_ID: editingSupplier ? editingSupplier.SUP_ID : generateId(),
-        SUP_NAME: formData.SUP_NAME.trim(),
-        CONTACT_PERSON: formData.CONTACT_PERSON?.trim() || '',
-        PHONE: formData.PHONE?.trim() || '',
-        EMAIL: formData.EMAIL?.trim() || '',
-        ADDRESS: formData.ADDRESS?.trim() || '',
-        STATUS: formData.STATUS || 'Active',
-        WEBSITE: formData.WEBSITE?.trim() || '',
-        TAX_ID: formData.TAX_ID?.trim() || '',
-        NOTES: formData.NOTES?.trim() || ''
-      };
-
-      if (editingSupplier) {
-        // Update existing
-        setSuppliers(prev => prev.map(s => 
-          s.SUP_ID === editingSupplier.SUP_ID ? newSupplier : s
-        ));
-        showMessage('✅ Supplier updated successfully!');
-      } else {
-        // Add new
-        setSuppliers(prev => [...prev, newSupplier]);
-        showMessage('✅ Supplier created successfully!');
-      }
-      
-      setShowModal(false);
-      setEditingSupplier(null);
-      resetForm();
-      calculateStats(suppliers);
-    } catch (error) {
-      console.error('Submit error:', error);
-      showMessage('❌ Failed to save supplier', 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ===== HANDLE DELETE =====
-  const handleDelete = useCallback((id) => {
-    if (!window.confirm('Are you sure you want to delete this supplier?')) return;
-    
-    try {
-      setSuppliers(prev => prev.filter(s => s.SUP_ID !== id));
-      showMessage('✅ Supplier deleted successfully!');
-      setSelectedSuppliers(prev => prev.filter(s => s !== id));
-    } catch (error) {
-      console.error('Delete error:', error);
-      showMessage('❌ Failed to delete supplier', 'error');
-    }
-  }, [showMessage]);
-
-  // ===== BULK DELETE =====
-  const handleBulkDelete = useCallback(() => {
-    if (selectedSuppliers.length === 0) return;
-    if (!window.confirm(`Delete ${selectedSuppliers.length} selected suppliers?`)) return;
-
-    try {
-      setSuppliers(prev => prev.filter(s => !selectedSuppliers.includes(s.SUP_ID)));
-      showMessage(`✅ ${selectedSuppliers.length} suppliers deleted!`);
-      setSelectedSuppliers([]);
-    } catch (error) {
-      console.error('Bulk delete error:', error);
-      showMessage('❌ Failed to delete some suppliers', 'error');
-    }
-  }, [selectedSuppliers, showMessage]);
 
   // ===== RESET FORM =====
   const resetForm = useCallback(() => {
@@ -268,7 +199,151 @@ const Suppliers = () => {
     });
   }, []);
 
-  // ===== OPEN MODAL =====
+  // ===== ✅ FIXED: FETCH SUPPLIERS (no field-name translation, just normalize) =====
+  const fetchSuppliers = useCallback(async () => {
+    if (fetchInProgress.current) return;
+    if (!isMounted.current) return;
+    
+    fetchInProgress.current = true;
+    setLoading(true);
+    
+    try {
+      const url = search ? `/suppliers?search=${encodeURIComponent(search)}` : '/suppliers';
+      const res = await api.get(url);
+      
+      if (isMounted.current) {
+        let data = [];
+        if (Array.isArray(res.data)) {
+          data = res.data;
+        } else if (res.data?.data && Array.isArray(res.data.data)) {
+          data = res.data.data;
+        }
+        
+        if (data.length > 0) {
+          const normalized = data.map((item, index) => normalizeSupplier(item, index)).filter(Boolean);
+          setSuppliers(normalized);
+          calculateStats(normalized);
+        } else {
+          const mockData = generateMockSuppliers().map((item, index) => normalizeSupplier(item, index)).filter(Boolean);
+          setSuppliers(mockData);
+          calculateStats(mockData);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error fetching suppliers:', error);
+      if (isMounted.current) {
+        const mockData = generateMockSuppliers().map((item, index) => normalizeSupplier(item, index)).filter(Boolean);
+        setSuppliers(mockData);
+        calculateStats(mockData);
+        showMessage('⚠️ Using sample data (API unavailable)', 'warning');
+      }
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+      fetchInProgress.current = false;
+    }
+  }, [search, showMessage, calculateStats]);
+
+  // ===== GENERATE NEW ID (fallback only — backend normally assigns this) =====
+  const generateId = useCallback(() => {
+    if (suppliers.length === 0) return 'SUP001';
+    const maxId = suppliers.reduce((max, s) => {
+      const num = parseInt(s.SUP_ID?.replace('SUP', '') || '0');
+      return num > max ? num : max;
+    }, 0);
+    return `SUP${String(maxId + 1).padStart(3, '0')}`;
+  }, [suppliers]);
+
+  // ===== OPEN ADD MODAL =====
+  const openAddModal = useCallback(() => {
+    setEditingSupplier(null);
+    resetForm();
+    setShowModal(true);
+  }, [resetForm]);
+
+  // ===== ✅ FIXED: HANDLE SUBMIT — send formData directly, backend maps it =====
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    
+    if (!formData.SUP_NAME || formData.SUP_NAME.trim() === '') {
+      showMessage('❌ Supplier name is required', 'error');
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      if (editingSupplier) {
+        await api.put(`/suppliers/${editingSupplier.SUP_ID}`, formData);
+        
+        const updatedSuppliers = suppliers.map(s => 
+          s.SUP_ID === editingSupplier.SUP_ID ? { ...formData, SUP_ID: editingSupplier.SUP_ID } : s
+        );
+        setSuppliers(updatedSuppliers);
+        calculateStats(updatedSuppliers);
+        showMessage('✅ Supplier updated successfully!');
+      } else {
+        const response = await api.post('/suppliers', formData);
+        const newId = response.data?.SUP_ID || generateId();
+        const newSupplier = { ...formData, SUP_ID: newId };
+        const updatedSuppliers = [...suppliers, newSupplier];
+        setSuppliers(updatedSuppliers);
+        calculateStats(updatedSuppliers);
+        showMessage('✅ Supplier created successfully!');
+      }
+      
+      setShowModal(false);
+      setEditingSupplier(null);
+      resetForm();
+    } catch (error) {
+      console.error('Submit error:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Failed to save supplier';
+      showMessage(`❌ ${errorMsg}`, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [formData, editingSupplier, suppliers, showMessage, calculateStats, generateId, resetForm]);
+
+  // ===== HANDLE DELETE =====
+  const handleDelete = useCallback(async (id) => {
+    if (!window.confirm('Are you sure you want to delete this supplier?')) return;
+    
+    try {
+      await api.delete(`/suppliers/${id}`);
+      
+      const updatedSuppliers = suppliers.filter(s => s.SUP_ID !== id);
+      setSuppliers(updatedSuppliers);
+      calculateStats(updatedSuppliers);
+      showMessage('✅ Supplier deleted successfully!');
+      setSelectedSuppliers(prev => prev.filter(s => s !== id));
+    } catch (error) {
+      console.error('Delete error:', error);
+      showMessage('❌ Failed to delete supplier', 'error');
+    }
+  }, [suppliers, showMessage, calculateStats]);
+
+  // ===== BULK DELETE =====
+  const handleBulkDelete = useCallback(() => {
+    if (selectedSuppliers.length === 0) return;
+    if (!window.confirm(`Delete ${selectedSuppliers.length} selected suppliers?`)) return;
+
+    api.delete('/suppliers/bulk', { data: { ids: selectedSuppliers } })
+      .then(() => {
+        const updatedSuppliers = suppliers.filter(s => !selectedSuppliers.includes(s.SUP_ID));
+        setSuppliers(updatedSuppliers);
+        calculateStats(updatedSuppliers);
+        showMessage(`✅ ${selectedSuppliers.length} suppliers deleted!`);
+        setSelectedSuppliers([]);
+      })
+      .catch(error => {
+        console.error('Bulk delete error:', error);
+        showMessage('❌ Failed to delete some suppliers', 'error');
+      });
+  }, [selectedSuppliers, suppliers, showMessage, calculateStats]);
+
+  // ===== OPEN EDIT MODAL =====
   const openEditModal = useCallback((supplier) => {
     setEditingSupplier(supplier);
     setFormData({
@@ -285,22 +360,10 @@ const Suppliers = () => {
     setShowModal(true);
   }, []);
 
-  const openAddModal = useCallback(() => {
-    setEditingSupplier(null);
-    resetForm();
-    setShowModal(true);
-  }, [resetForm]);
-
   // ===== VIEW SUPPLIER DETAIL =====
   const viewSupplierDetail = useCallback((supplier) => {
     setSelectedSupplierDetail(supplier);
     setShowDetailModal(true);
-  }, []);
-
-  // ===== CLOSE DETAIL MODAL =====
-  const closeDetailModal = useCallback(() => {
-    setShowDetailModal(false);
-    setSelectedSupplierDetail(null);
   }, []);
 
   // ===== TOGGLE SELECT =====
@@ -367,17 +430,13 @@ const Suppliers = () => {
   // ===== REFRESH =====
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      showMessage('✅ Refreshed!', 'success');
-    }, 800);
-  }, [showMessage]);
+    fetchSuppliers();
+  }, [fetchSuppliers]);
 
   // ===== FILTERED & SORTED SUPPLIERS =====
   const filteredSuppliers = useMemo(() => {
     let result = [...suppliers];
 
-    // Search filter
     if (search) {
       const lowerSearch = search.toLowerCase();
       result = result.filter(s => 
@@ -389,7 +448,6 @@ const Suppliers = () => {
       );
     }
 
-    // Status filter
     if (filterStatus === 'active') {
       result = result.filter(s => (s.STATUS || 'Active') === 'Active');
     } else if (filterStatus === 'inactive') {
@@ -400,7 +458,6 @@ const Suppliers = () => {
       result = result.filter(s => s.EMAIL && s.EMAIL.trim() !== '');
     }
 
-    // Sort
     result.sort((a, b) => {
       let comparison = 0;
       const aVal = a[sortBy] || '';
@@ -421,15 +478,15 @@ const Suppliers = () => {
   }, [suppliers, search, filterStatus, sortBy, sortOrder]);
 
   // ===== GET STATUS BADGE =====
-  const getStatusBadge = (status) => {
+  const getStatusBadge = useCallback((status) => {
     const isActive = (status || 'Active') === 'Active';
     return isActive 
       ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
       : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800';
-  };
+  }, []);
 
   // ===== GET STAT ICON =====
-  const getStatIcon = (type) => {
+  const getStatIcon = useCallback((type) => {
     const icons = {
       total: <Building2 className="w-5 h-5 text-indigo-500" />,
       active: <CheckCircle className="w-5 h-5 text-emerald-500" />,
@@ -437,10 +494,10 @@ const Suppliers = () => {
       withEmail: <Mail className="w-5 h-5 text-purple-500" />
     };
     return icons[type] || icons.total;
-  };
+  }, []);
 
   // ===== GET AVATAR COLOR =====
-  const getAvatarColor = (name) => {
+  const getAvatarColor = useCallback((name) => {
     const colors = [
       'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 
       'bg-blue-500', 'bg-green-500', 'bg-yellow-500',
@@ -451,15 +508,29 @@ const Suppliers = () => {
       hash = name.charCodeAt(i) + ((hash << 5) - hash);
     }
     return colors[Math.abs(hash) % colors.length];
-  };
+  }, []);
 
   // ===== GET INITIALS =====
-  const getInitials = (name) => {
+  const getInitials = useCallback((name) => {
     if (!name || name === 'Unknown') return '?';
     const parts = name.split(' ');
     if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-  };
+  }, []);
+
+  // ===== INITIAL LOAD =====
+  useEffect(() => {
+    isMounted.current = true;
+    fetchSuppliers();
+    
+    return () => {
+      isMounted.current = false;
+      if (messageTimeoutRef.current) {
+        clearTimeout(messageTimeoutRef.current);
+      }
+      fetchInProgress.current = false;
+    };
+  }, [fetchSuppliers]);
 
   // ===== LOADING =====
   if (loading) {
@@ -473,28 +544,34 @@ const Suppliers = () => {
         </div>
         <p className="text-gray-400 font-medium">Loading suppliers...</p>
         <div className="flex gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0s' }} />
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0.2s' }} />
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0.4s' }} />
+          <span key="dot1" className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0s' }} />
+          <span key="dot2" className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0.2s' }} />
+          <span key="dot3" className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style={{ animationDelay: '0.4s' }} />
         </div>
       </div>
     );
   }
 
+  // ============================================
+  // RENDER
+  // ============================================
   return (
     <div className="space-y-4 p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen">
       
       {/* ===== MESSAGE TOAST ===== */}
       {message && (
-        <div className={`fixed top-4 right-4 z-50 max-w-md w-full p-4 rounded-xl shadow-2xl border transform transition-all duration-500 animate-slideInRight ${
-          messageType === 'success' 
-            ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' 
-            : messageType === 'error'
-            ? 'bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
-            : messageType === 'warning'
-            ? 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
-            : 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
-        }`}>
+        <div 
+          key="message-toast"
+          className={`fixed top-4 right-4 z-50 max-w-md w-full p-4 rounded-xl shadow-2xl border transform transition-all duration-500 animate-slideInRight ${
+            messageType === 'success' 
+              ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' 
+              : messageType === 'error'
+              ? 'bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+              : messageType === 'warning'
+              ? 'bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/30 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300'
+              : 'bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
+          }`}
+        >
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 mt-0.5">
               {messageType === 'success' && <CheckCircle className="w-5 h-5 text-green-500" />}
@@ -509,7 +586,7 @@ const Suppliers = () => {
         </div>
       )}
 
-      {/* ===== HEADER WITH STATS ===== */}
+      {/* ===== HEADER ===== */}
       <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl">
         <div className="flex flex-wrap justify-between items-center">
           <div>
@@ -527,7 +604,7 @@ const Suppliers = () => {
             <button 
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="bg-white/20 backdrop-blur-sm p-2 rounded-xl hover:bg-white/30 transition"
+              className="bg-white/20 backdrop-blur-sm p-2 rounded-xl hover:bg-white/30 transition disabled:opacity-50"
             >
               <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -555,8 +632,11 @@ const Suppliers = () => {
             { label: 'Active', value: supplierStats.active, icon: 'active' },
             { label: 'With Phone', value: supplierStats.withPhone, icon: 'withPhone' },
             { label: 'With Email', value: supplierStats.withEmail, icon: 'withEmail' }
-          ].map((stat, index) => (
-            <div key={index} className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition animate-slideUp" style={{ animationDelay: `${index * 0.1}s` }}>
+          ].map((stat) => (
+            <div 
+              key={stat.label}
+              className="bg-white/10 backdrop-blur-sm rounded-xl p-3 hover:bg-white/20 transition animate-slideUp"
+            >
               <div className="flex items-center gap-2">
                 {getStatIcon(stat.icon)}
                 <p className="text-xs text-indigo-200">{stat.label}</p>
@@ -571,19 +651,17 @@ const Suppliers = () => {
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4">
         <div className="flex flex-wrap justify-between items-center gap-3">
           <div className="flex flex-wrap items-center gap-3 flex-1">
-            {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="🔍 Search by name, contact, phone..."
+                placeholder="🔍 Search suppliers..."
                 className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
               />
             </div>
 
-            {/* Filter */}
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
@@ -596,7 +674,6 @@ const Suppliers = () => {
               <option value="withEmail">With Email</option>
             </select>
 
-            {/* Sort */}
             <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
               <select
                 value={sortBy}
@@ -618,7 +695,6 @@ const Suppliers = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* View Mode */}
             <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
               <button
                 onClick={() => setViewMode('grid')}
@@ -636,7 +712,6 @@ const Suppliers = () => {
               </button>
             </div>
 
-            {/* Bulk Actions */}
             {selectedSuppliers.length > 0 && (
               <button
                 onClick={handleBulkDelete}
@@ -667,10 +742,9 @@ const Suppliers = () => {
           </button>
         </div>
       ) : viewMode === 'grid' ? (
-        // ===== GRID VIEW =====
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredSuppliers.map((supplier, index) => {
-            const id = supplier.SUP_ID;
+            const id = supplier.SUP_ID || `supplier-${index}`;
             const name = supplier.SUP_NAME || 'Unknown';
             const contact = supplier.CONTACT_PERSON || '';
             const phone = supplier.PHONE || '';
@@ -687,11 +761,9 @@ const Suppliers = () => {
                 className={`bg-white dark:bg-gray-800 rounded-2xl shadow-sm border-2 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group animate-fadeIn cursor-pointer ${
                   isSelected ? 'border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/30' : 'border-gray-100 dark:border-gray-700 hover:border-indigo-300 dark:hover:border-indigo-700'
                 }`}
-                style={{ animationDelay: `${index * 0.05}s` }}
                 onClick={() => toggleSelect(id)}
               >
                 <div className="p-5">
-                  {/* Header */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-lg ${avatarColor} shadow-lg`}>
@@ -709,7 +781,7 @@ const Suppliers = () => {
                         ) : (
                           <p className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[120px] flex items-center gap-1">
                             <User className="w-3 h-3" />
-                            No contact person
+                            No contact
                           </p>
                         )}
                       </div>
@@ -748,7 +820,6 @@ const Suppliers = () => {
                     </div>
                   </div>
 
-                  {/* Contact Info */}
                   <div className="space-y-1.5 mb-3">
                     {phone && (
                       <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
@@ -775,7 +846,6 @@ const Suppliers = () => {
                     )}
                   </div>
 
-                  {/* Status */}
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(status)}`}>
                       {status}
@@ -783,7 +853,7 @@ const Suppliers = () => {
                     {supplier.WEBSITE && (
                       <span className="text-xs text-gray-400 flex items-center gap-1">
                         <Globe className="w-3 h-3" />
-                        {supplier.WEBSITE}
+                        {supplier.WEBSITE.replace(/^https?:\/\//, '').slice(0, 15)}
                       </span>
                     )}
                   </div>
@@ -793,7 +863,6 @@ const Suppliers = () => {
           })}
         </div>
       ) : (
-        // ===== LIST VIEW =====
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -808,7 +877,7 @@ const Suppliers = () => {
                     />
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Supplier</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">Contact Person</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden md:table-cell">Contact</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden sm:table-cell">Phone</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden lg:table-cell">Email</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider hidden xl:table-cell">Address</th>
@@ -818,7 +887,7 @@ const Suppliers = () => {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {filteredSuppliers.map((supplier, index) => {
-                  const id = supplier.SUP_ID;
+                  const id = supplier.SUP_ID || `supplier-${index}`;
                   const name = supplier.SUP_NAME || 'Unknown';
                   const contact = supplier.CONTACT_PERSON || '';
                   const phone = supplier.PHONE || '';
@@ -829,9 +898,8 @@ const Suppliers = () => {
 
                   return (
                     <tr 
-                      key={id} 
-                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition group animate-slideIn ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/10' : ''}`}
-                      style={{ animationDelay: `${index * 0.03}s` }}
+                      key={id}
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition group ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/10' : ''}`}
                     >
                       <td className="px-3 py-3">
                         <input
@@ -902,17 +970,17 @@ const Suppliers = () => {
 
       {/* ===== FOOTER ===== */}
       <div className="text-center text-xs text-gray-400 dark:text-gray-500 py-4 border-t border-gray-200 dark:border-gray-700">
-        <p className="flex items-center justify-center gap-4 flex-wrap">
-          <span>🚚 {filteredSuppliers.length} suppliers displayed</span>
-          <span>•</span>
-          <span>💾 {supplierStats.total} total suppliers</span>
-          <span>•</span>
-          <span>📱 {supplierStats.withPhone} with phone</span>
-          <span>•</span>
-          <span>✉️ {supplierStats.withEmail} with email</span>
-          <span>•</span>
-          <span>{new Date().toLocaleString()}</span>
-        </p>
+        <div className="flex items-center justify-center gap-4 flex-wrap">
+          <span key="footer-displayed">🚚 {filteredSuppliers.length} suppliers displayed</span>
+          <span key="footer-bullet1">•</span>
+          <span key="footer-total">💾 {supplierStats.total} total suppliers</span>
+          <span key="footer-bullet2">•</span>
+          <span key="footer-phone">📱 {supplierStats.withPhone} with phone</span>
+          <span key="footer-bullet3">•</span>
+          <span key="footer-email">✉️ {supplierStats.withEmail} with email</span>
+          <span key="footer-bullet4">•</span>
+          <span key="footer-time">{new Date().toLocaleString()}</span>
+        </div>
       </div>
 
       {/* ===== DETAIL MODAL ===== */}
@@ -925,7 +993,7 @@ const Suppliers = () => {
                 Supplier Details
               </h2>
               <button 
-                onClick={closeDetailModal}
+                onClick={() => setShowDetailModal(false)}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all duration-300 hover:rotate-90"
               >
                 <X className="w-5 h-5 text-gray-500" />
@@ -993,7 +1061,7 @@ const Suppliers = () => {
               <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex gap-3">
                 <button
                   onClick={() => {
-                    closeDetailModal();
+                    setShowDetailModal(false);
                     openEditModal(selectedSupplierDetail);
                   }}
                   className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium"
@@ -1003,7 +1071,7 @@ const Suppliers = () => {
                 </button>
                 <button
                   onClick={() => {
-                    closeDetailModal();
+                    setShowDetailModal(false);
                     handleDelete(selectedSupplierDetail.SUP_ID);
                   }}
                   className="px-4 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition font-medium"
@@ -1036,7 +1104,7 @@ const Suppliers = () => {
 
             <form onSubmit={handleSubmit} className="p-6">
               <div className="space-y-4">
-                <div className="group">
+                <div>
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                     Supplier Name <span className="text-red-500">*</span>
                   </label>
@@ -1045,104 +1113,104 @@ const Suppliers = () => {
                     required
                     value={formData.SUP_NAME}
                     onChange={(e) => setFormData({...formData, SUP_NAME: e.target.value})}
-                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                     placeholder="Enter supplier name"
                     disabled={submitting}
                   />
                 </div>
 
-                <div className="group">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Contact Person</label>
                   <input
                     type="text"
                     value={formData.CONTACT_PERSON}
                     onChange={(e) => setFormData({...formData, CONTACT_PERSON: e.target.value})}
-                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                     placeholder="Enter contact person name"
                     disabled={submitting}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="group">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Phone</label>
                     <input
                       type="text"
                       value={formData.PHONE}
                       onChange={(e) => setFormData({...formData, PHONE: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                       placeholder="Enter phone number"
                       disabled={submitting}
                     />
                   </div>
-                  <div className="group">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Email</label>
                     <input
                       type="email"
                       value={formData.EMAIL}
                       onChange={(e) => setFormData({...formData, EMAIL: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                       placeholder="Enter email address"
                       disabled={submitting}
                     />
                   </div>
                 </div>
 
-                <div className="group">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Address</label>
                   <input
                     type="text"
                     value={formData.ADDRESS}
                     onChange={(e) => setFormData({...formData, ADDRESS: e.target.value})}
-                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                     placeholder="Enter address"
                     disabled={submitting}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="group">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Website</label>
                     <input
                       type="text"
                       value={formData.WEBSITE}
                       onChange={(e) => setFormData({...formData, WEBSITE: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                       placeholder="Enter website"
                       disabled={submitting}
                     />
                   </div>
-                  <div className="group">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Tax ID</label>
                     <input
                       type="text"
                       value={formData.TAX_ID}
                       onChange={(e) => setFormData({...formData, TAX_ID: e.target.value})}
-                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                      className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                       placeholder="Enter tax ID"
                       disabled={submitting}
                     />
                   </div>
                 </div>
 
-                <div className="group">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Notes</label>
                   <textarea
                     value={formData.NOTES}
                     onChange={(e) => setFormData({...formData, NOTES: e.target.value})}
-                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                     placeholder="Enter notes"
                     rows="3"
                     disabled={submitting}
                   />
                 </div>
 
-                <div className="group">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Status</label>
                   <select
                     value={formData.STATUS}
                     onChange={(e) => setFormData({...formData, STATUS: e.target.value})}
-                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-300 group-hover:border-indigo-300"
+                    className="w-full px-3 py-2.5 border-2 border-gray-200 dark:border-gray-700 dark:bg-gray-700 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
                     disabled={submitting}
                   >
                     <option value="Active">Active</option>

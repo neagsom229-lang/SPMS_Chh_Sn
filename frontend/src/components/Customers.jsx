@@ -8,22 +8,25 @@ import {
   TrendingUp, TrendingDown, Award, Star, Clock,
   Calendar, ChevronRight, Eye, Copy, Tag, Layers,
   Box, MessageCircle, Heart, Shield, Zap,
-  Sparkles, Gift, Crown
+  Sparkles, Gift, Crown, AlertTriangle,
+  Image as ImageIcon, Upload, Camera
 } from 'lucide-react';
 
 // ============================================
-// API CONFIGURATION - FIXED ✅
+// API CONFIGURATION
 // ============================================
-const API_BASE = import.meta.env?.VITE_API_URL || '';
+const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+console.log('🔧 API_BASE (Customers):', API_BASE);
+
 const api = axios.create({
   baseURL: API_BASE,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
 });
 
-// Add interceptors for debugging
 api.interceptors.request.use(
   config => {
     console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
@@ -70,6 +73,12 @@ const Customers = () => {
     totalBalance: 0
   });
 
+  // ===== IMAGE UPLOAD STATE =====
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false); // ✅ now a real lock, see handleImageSelect
+
   // ===== FORM DATA =====
   const [formData, setFormData] = useState({
     FIRST_NAME: '',
@@ -78,13 +87,18 @@ const Customers = () => {
     E_MAIL: '',
     ADDRESS: '',
     BALANCE: '',
-    STATUS: 'Active'
+    STATUS: 'Active',
+    IMAGE_URL: ''
   });
 
   // ===== REFS =====
   const isMounted = useRef(true);
   const searchTimeout = useRef(null);
   const headerRef = useRef(null);
+  const fileInputRef = useRef(null);
+  // ✅ Mirrors formData.IMAGE_URL synchronously so handleSubmit never reads a stale
+  // value, even if it fires in the same tick as a state update.
+  const imageUrlRef = useRef('');
 
   // ===== MOUSE TRACKING =====
   useEffect(() => {
@@ -95,53 +109,9 @@ const Customers = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // ===== FETCH CUSTOMERS - FIXED ✅ =====
-  const fetchCustomers = useCallback(async () => {
-    setLoading(true);
-    try {
-      // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('/api/customers', { 
-        params: { search: search || undefined } 
-      });
-      if (isMounted.current) {
-        const data = res.data || [];
-        setCustomers(data);
-        calculateStats(data);
-      }
-    } catch (error) {
-      console.error('Error fetching customers:', error);
-      if (isMounted.current) {
-        showMessage('❌ Failed to load customers', 'error');
-        const fallbackData = [
-          { CUS_ID: 'CUS001', FIRST_NAME: 'John', LAST_NAME: 'Doe', PHONE: '555-0101', E_MAIL: 'john@example.com', ADDRESS: '123 Main St, NY', BALANCE: 150.00, STATUS: 'Active' },
-          { CUS_ID: 'CUS002', FIRST_NAME: 'Jane', LAST_NAME: 'Smith', PHONE: '555-0102', E_MAIL: 'jane@example.com', ADDRESS: '456 Oak Ave, LA', BALANCE: 0.00, STATUS: 'Active' },
-          { CUS_ID: 'CUS003', FIRST_NAME: 'Robert', LAST_NAME: 'Johnson', PHONE: '555-0103', E_MAIL: 'robert@example.com', ADDRESS: '789 Pine Rd, SF', BALANCE: 75.50, STATUS: 'Active' },
-          { CUS_ID: 'CUS004', FIRST_NAME: 'Mary', LAST_NAME: 'Williams', PHONE: '555-0104', E_MAIL: 'mary@example.com', ADDRESS: '321 Elm St, CHI', BALANCE: 200.00, STATUS: 'Active' },
-          { CUS_ID: 'CUS005', FIRST_NAME: 'David', LAST_NAME: 'Brown', PHONE: '', E_MAIL: '', ADDRESS: '', BALANCE: 0.00, STATUS: 'Inactive' },
-        ];
-        setCustomers(fallbackData);
-        calculateStats(fallbackData);
-      }
-    } finally {
-      if (isMounted.current) {
-        setLoading(false);
-        setIsRefreshing(false);
-      }
-    }
-  }, [search]);
-
-  // ===== CALCULATE STATS =====
-  const calculateStats = useCallback((data) => {
-    const stats = {
-      total: data.length,
-      active: data.filter(c => (c.STATUS || c.status || 'Active') === 'Active').length,
-      withPhone: data.filter(c => c.PHONE || c.phone).length,
-      totalBalance: data.reduce((sum, c) => sum + Number(c.BALANCE || c.balance || 0), 0)
-    };
-    setCustomerStats(stats);
-  }, []);
-
-  // ===== SHOW MESSAGE =====
+  // ============================================
+  // SHOW MESSAGE
+  // ============================================
   const showMessage = useCallback((text, type = 'success') => {
     setMessage(text);
     setMessageType(type);
@@ -149,7 +119,593 @@ const Customers = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // ===== INITIAL LOAD =====
+  // ============================================
+  // GET FALLBACK CUSTOMERS
+  // ============================================
+  const getFallbackCustomers = useCallback(() => {
+    return [
+      { 
+        CUS_ID: 'CUS001', 
+        FIRST_NAME: 'John', 
+        LAST_NAME: 'Doe', 
+        PHONE: '555-0101', 
+        E_MAIL: 'john@example.com', 
+        ADDRESS: '123 Main St, NY', 
+        BALANCE: 150.00, 
+        STATUS: 'Active',
+        image_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop'
+      },
+      { 
+        CUS_ID: 'CUS002', 
+        FIRST_NAME: 'Jane', 
+        LAST_NAME: 'Smith', 
+        PHONE: '555-0102', 
+        E_MAIL: 'jane@example.com', 
+        ADDRESS: '456 Oak Ave, LA', 
+        BALANCE: 0.00, 
+        STATUS: 'Active',
+        image_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop'
+      },
+      { 
+        CUS_ID: 'CUS003', 
+        FIRST_NAME: 'Robert', 
+        LAST_NAME: 'Johnson', 
+        PHONE: '555-0103', 
+        E_MAIL: 'robert@example.com', 
+        ADDRESS: '789 Pine Rd, SF', 
+        BALANCE: 75.50, 
+        STATUS: 'Active',
+        image_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop'
+      },
+      { 
+        CUS_ID: 'CUS004', 
+        FIRST_NAME: 'Mary', 
+        LAST_NAME: 'Williams', 
+        PHONE: '555-0104', 
+        E_MAIL: 'mary@example.com', 
+        ADDRESS: '321 Elm St, CHI', 
+        BALANCE: 200.00, 
+        STATUS: 'Active',
+        image_url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop'
+      }
+    ];
+  }, []);
+
+  // ============================================
+  // SAFE DATA EXTRACTION
+  // ============================================
+  const extractCustomersData = useCallback((responseData) => {
+    if (typeof responseData === 'string' && responseData.includes('<!DOCTYPE html>')) {
+      console.warn('⚠️ Received HTML - API not available');
+      return [];
+    }
+    
+    if (Array.isArray(responseData)) {
+      return responseData;
+    }
+    
+    if (responseData && typeof responseData === 'object') {
+      if (Array.isArray(responseData.data)) {
+        return responseData.data;
+      }
+      if (Array.isArray(responseData.customers)) {
+        return responseData.customers;
+      }
+      if (Array.isArray(responseData.items)) {
+        return responseData.items;
+      }
+      if (responseData.data && typeof responseData.data === 'object') {
+        if (Array.isArray(responseData.data.items)) {
+          return responseData.data.items;
+        }
+        if (Array.isArray(responseData.data.customers)) {
+          return responseData.data.customers;
+        }
+        const values = Object.values(responseData.data);
+        if (values.length > 0 && Array.isArray(values[0])) {
+          return values[0];
+        }
+      }
+    }
+    
+    return [];
+  }, []);
+
+  // ============================================
+  // CALCULATE STATS
+  // ============================================
+  const calculateStats = useCallback((data) => {
+    const customersArray = Array.isArray(data) ? data : [];
+    const stats = {
+      total: customersArray.length,
+      active: customersArray.filter(c => {
+        const status = c.STATUS || c.status || 'Active';
+        return status === 'Active';
+      }).length,
+      withPhone: customersArray.filter(c => c.PHONE || c.phone).length,
+      totalBalance: customersArray.reduce((sum, c) => {
+        const balance = Number(c.BALANCE || c.balance || 0);
+        return sum + balance;
+      }, 0)
+    };
+    setCustomerStats(stats);
+  }, []);
+
+  // ============================================
+  // FETCH CUSTOMERS
+  // ============================================
+  const fetchCustomers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/customers', { 
+        params: search ? { search: search } : {} 
+      });
+      
+      if (isMounted.current) {
+        if (typeof res.data === 'string' && res.data.includes('<!DOCTYPE html>')) {
+          const fallbackData = getFallbackCustomers();
+          setCustomers(fallbackData);
+          calculateStats(fallbackData);
+          showMessage('📋 Using offline data (API not available)', 'warning');
+          setLoading(false);
+          setIsRefreshing(false);
+          return;
+        }
+
+        const customersData = extractCustomersData(res.data);
+        const customersArray = Array.isArray(customersData) ? customersData : [];
+        
+        if (customersArray.length > 0) {
+          console.log('✅ Customers loaded:', customersArray.length);
+          setCustomers(customersArray);
+          calculateStats(customersArray);
+        } else {
+          const fallbackData = getFallbackCustomers();
+          setCustomers(fallbackData);
+          calculateStats(fallbackData);
+          showMessage('📋 Using fallback data (API returned empty)', 'info');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error fetching customers:', error.message);
+      if (isMounted.current) {
+        const fallbackData = getFallbackCustomers();
+        setCustomers(fallbackData);
+        calculateStats(fallbackData);
+        showMessage('📋 Using offline data (API connection failed)', 'warning');
+      }
+    } finally {
+      if (isMounted.current) {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+    }
+  }, [search, showMessage, getFallbackCustomers, extractCustomersData, calculateStats]);
+
+  // ============================================
+  // ✅ FIXED: IMAGE HANDLING
+  // Same bug as Products.jsx: FileReader.readAsDataURL() is async but nothing
+  // blocked the Save button while it was still running, so a quick click right
+  // after choosing a photo submitted with IMAGE_URL still empty. Fixed by:
+  //   1. Actually setting isUploading true/false around the read.
+  //   2. Wrapping FileReader in a Promise so we can await it.
+  //   3. Writing to imageUrlRef synchronously the instant we have the base64
+  //      string, so submit never reads a stale/empty value.
+  //   4. Disabling Save (and blocking handleSubmit) while isUploading is true.
+  // ============================================
+  const readFileAsDataURL = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageSelect = useCallback(async (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+      console.log('❌ No file selected');
+      return;
+    }
+
+    console.log('📸 File selected:', file.name, file.type, file.size);
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif'];
+    if (!validTypes.includes(file.type)) {
+      showMessage('❌ Please select a valid image (JPEG, PNG, WEBP, GIF)', 'error');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showMessage('❌ Image size must be less than 5MB', 'error');
+      return;
+    }
+
+    setSelectedImage(file);
+    setIsUploading(true);
+    setUploadProgress(30);
+
+    try {
+      const base64Image = await readFileAsDataURL(file);
+      setUploadProgress(100);
+
+      console.log('📸 Base64 image length:', base64Image.length);
+
+      // ✅ Write to the ref immediately — this is synchronous and can't race with a click.
+      imageUrlRef.current = base64Image;
+
+      setImagePreview(base64Image);
+      setFormData(prev => {
+        console.log('📸 Updating formData with image');
+        return { ...prev, IMAGE_URL: base64Image };
+      });
+
+      showMessage('✅ Image selected successfully!', 'success');
+    } catch (err) {
+      console.error('❌ Failed to read image:', err);
+      showMessage('❌ Failed to read image file', 'error');
+    } finally {
+      setIsUploading(false);
+      setTimeout(() => setUploadProgress(0), 400);
+    }
+  }, [showMessage]);
+
+  const removeImage = useCallback(() => {
+    console.log('🗑️ Removing image...');
+    setSelectedImage(null);
+    setImagePreview(null);
+    setUploadProgress(0);
+    imageUrlRef.current = '';
+    setFormData(prev => {
+      console.log('🗑️ Clearing image from formData');
+      return { ...prev, IMAGE_URL: '' };
+    });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
+
+  // ============================================
+  // ✅ OPEN EDIT MODAL - Reads image_url from database
+  // ============================================
+  const openEditModal = useCallback((customer) => {
+    const customerId = customer.CUS_ID || customer.cus_id || customer.ID;
+    console.log('✏️ Editing customer:', customerId);
+    
+    // ✅ Read from database field (image_url) or fallback to IMAGE_URL
+    const existingImage = customer.image_url || customer.IMAGE_URL || '';
+    console.log('📸 Existing image:', existingImage ? 'YES (has image)' : 'NO (no image)');
+    
+    setEditingCustomer(customer);
+    setFormData({
+      FIRST_NAME: customer.FIRST_NAME || customer.first_name || '',
+      LAST_NAME: customer.LAST_NAME || customer.last_name || '',
+      PHONE: customer.PHONE || customer.phone || '',
+      E_MAIL: customer.E_MAIL || customer.e_mail || '',
+      ADDRESS: customer.ADDRESS || customer.address || '',
+      BALANCE: customer.BALANCE || customer.balance || '',
+      STATUS: customer.STATUS || customer.status || 'Active',
+      IMAGE_URL: existingImage  // ✅ Use the existing image
+    });
+    imageUrlRef.current = existingImage;
+    
+    if (existingImage) {
+      setImagePreview(existingImage);
+      console.log('📸 Image preview loaded from existing');
+    } else {
+      setImagePreview(null);
+    }
+    
+    setSelectedImage(null);
+    setShowModal(true);
+  }, []);
+
+  const openAddModal = useCallback(() => {
+    setEditingCustomer(null);
+    resetForm();
+    setImagePreview(null);
+    setSelectedImage(null);
+    setShowModal(true);
+  }, []);
+
+  // ============================================
+  // ✅ FIXED: HANDLE SUBMIT
+  // Now reads imageUrlRef.current (always current) instead of trusting formData
+  // alone, and refuses to submit while an image is still being processed.
+  // ============================================
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (isUploading) {
+      showMessage('⏳ Please wait, image is still processing...', 'warning');
+      return;
+    }
+
+    setSubmitting(true);
+    
+    if (!formData.FIRST_NAME || formData.FIRST_NAME.trim() === '') {
+      showMessage('❌ First name is required', 'error');
+      setSubmitting(false);
+      return;
+    }
+    
+    if (!formData.LAST_NAME || formData.LAST_NAME.trim() === '') {
+      showMessage('❌ Last name is required', 'error');
+      setSubmitting(false);
+      return;
+    }
+
+    // ✅ Prefer the ref — it's always in sync, formData can lag a render behind
+    const imageUrl = imageUrlRef.current || formData.IMAGE_URL || '';
+    console.log('📸 Image URL before submit:', imageUrl ? `✅ EXISTS (${imageUrl.length} chars)` : '❌ EMPTY');
+
+    const submitData = {
+      FIRST_NAME: formData.FIRST_NAME.trim(),
+      LAST_NAME: formData.LAST_NAME.trim(),
+      PHONE: formData.PHONE?.trim() || '',
+      E_MAIL: formData.E_MAIL?.trim() || '',
+      ADDRESS: formData.ADDRESS?.trim() || '',
+      BALANCE: formData.BALANCE ? parseFloat(formData.BALANCE) : 0,
+      STATUS: formData.STATUS || 'Active',
+      IMAGE_URL: imageUrl
+    };
+
+    console.log('📤 Sending customer data:', {
+      ...submitData,
+      IMAGE_URL: submitData.IMAGE_URL ? `✅ (${submitData.IMAGE_URL.length} chars)` : '❌ MISSING'
+    });
+
+    try {
+      let customerId;
+      if (editingCustomer) {
+        customerId = editingCustomer.CUS_ID || editingCustomer.cus_id || editingCustomer.ID;
+        console.log('🆔 Updating customer ID:', customerId);
+      }
+
+      let response;
+      if (editingCustomer && customerId) {
+        response = await api.put(`/customers/${customerId}`, submitData);
+        showMessage('✅ Customer updated successfully!');
+      } else {
+        response = await api.post('/customers', submitData);
+        showMessage('✅ Customer created successfully!');
+      }
+      
+      console.log('📥 Server response:', response.data);
+      
+      setShowModal(false);
+      setEditingCustomer(null);
+      
+      await fetchCustomers();
+      
+      console.log('🔄 Resetting form and removing image...');
+      resetForm();
+      removeImage();
+      
+    } catch (error) {
+      console.error('❌ Submit error:', error.response?.data || error.message);
+      showMessage(`❌ ${error.response?.data?.error || 'Failed to save customer'}`, 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ============================================
+  // RESET FORM
+  // ============================================
+  const resetForm = useCallback(() => {
+    setFormData({ 
+      FIRST_NAME: '', 
+      LAST_NAME: '', 
+      PHONE: '', 
+      E_MAIL: '', 
+      ADDRESS: '', 
+      BALANCE: '',
+      STATUS: 'Active',
+      IMAGE_URL: ''
+    });
+    imageUrlRef.current = '';
+  }, []);
+
+  // ============================================
+  // HANDLE DELETE
+  // ============================================
+  const handleDelete = useCallback(async (id) => {
+    if (!window.confirm('Are you sure you want to delete this customer?')) return;
+    
+    const customer = customers.find(c => (c.CUS_ID || c.cus_id || c.ID) === id);
+    if (customer?._local) {
+      setCustomers(prev => prev.filter(c => (c.CUS_ID || c.cus_id || c.ID) !== id));
+      calculateStats(customers.filter(c => (c.CUS_ID || c.cus_id || c.ID) !== id));
+      showMessage('✅ Local customer deleted!');
+      return;
+    }
+
+    try {
+      await api.delete(`/customers/${id}`);
+      showMessage('✅ Customer deleted successfully!');
+      fetchCustomers();
+    } catch (error) {
+      console.error('Delete error:', error);
+      showMessage('❌ Failed to delete customer', 'error');
+    }
+  }, [customers, fetchCustomers, showMessage, calculateStats]);
+
+  // ============================================
+  // BULK DELETE
+  // ============================================
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedCustomers.length === 0) return;
+    if (!window.confirm(`Delete ${selectedCustomers.length} selected customers?`)) return;
+
+    try {
+      const localIds = [];
+      const apiIds = [];
+      
+      for (const id of selectedCustomers) {
+        const customer = customers.find(c => (c.CUS_ID || c.cus_id || c.ID) === id);
+        if (customer?._local) {
+          localIds.push(id);
+        } else {
+          apiIds.push(id);
+        }
+      }
+
+      if (localIds.length > 0) {
+        setCustomers(prev => prev.filter(c => !localIds.includes(c.CUS_ID || c.cus_id || c.ID)));
+        calculateStats(customers.filter(c => !localIds.includes(c.CUS_ID || c.cus_id || c.ID)));
+      }
+
+      for (const id of apiIds) {
+        await api.delete(`/customers/${id}`);
+      }
+
+      showMessage(`✅ ${selectedCustomers.length} customers deleted!`);
+      setSelectedCustomers([]);
+      if (apiIds.length > 0) fetchCustomers();
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      showMessage('❌ Failed to delete some customers', 'error');
+    }
+  }, [selectedCustomers, customers, fetchCustomers, showMessage, calculateStats]);
+
+  // ============================================
+  // TOGGLE SELECT
+  // ============================================
+  const toggleSelect = useCallback((id) => {
+    setSelectedCustomers(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(p => p !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedCustomers.length === customers.length) {
+      setSelectedCustomers([]);
+    } else {
+      setSelectedCustomers(customers.map(c => c.CUS_ID || c.cus_id || c.ID));
+    }
+  }, [selectedCustomers, customers]);
+
+  // ============================================
+  // FILTERED & SORTED CUSTOMERS
+  // ============================================
+  const filteredCustomers = useMemo(() => {
+    const customersArray = Array.isArray(customers) ? customers : [];
+    let result = [...customersArray];
+
+    if (filterStatus === 'active') {
+      result = result.filter(c => {
+        const status = c.STATUS || c.status || 'Active';
+        return status === 'Active';
+      });
+    } else if (filterStatus === 'inactive') {
+      result = result.filter(c => {
+        const status = c.STATUS || c.status || 'Active';
+        return status !== 'Active';
+      });
+    } else if (filterStatus === 'withBalance') {
+      result = result.filter(c => Number(c.BALANCE || c.balance || 0) > 0);
+    }
+
+    result.sort((a, b) => {
+      let comparison = 0;
+      const aVal = a[sortBy] ?? '';
+      const bVal = b[sortBy] ?? '';
+      
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        comparison = aVal.localeCompare(bVal);
+      } else if (typeof aVal === 'number' && typeof bVal === 'number') {
+        comparison = aVal - bVal;
+      } else {
+        comparison = String(aVal).localeCompare(String(bVal));
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [customers, filterStatus, sortBy, sortOrder]);
+
+  // ============================================
+  // HELPER FUNCTIONS
+  // ============================================
+  const getFullName = (customer) => {
+    const firstName = customer.FIRST_NAME || customer.first_name || '';
+    const lastName = customer.LAST_NAME || customer.last_name || '';
+    return `${firstName} ${lastName}`.trim() || 'Unknown';
+  };
+
+  const getInitials = (customer) => {
+    const firstName = customer.FIRST_NAME || customer.first_name || '';
+    const lastName = customer.LAST_NAME || customer.last_name || '';
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || '?';
+  };
+
+  const getAvatarColor = (name) => {
+    const colors = [
+      'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 
+      'bg-blue-500', 'bg-green-500', 'bg-yellow-500',
+      'bg-red-500', 'bg-orange-500', 'bg-teal-500',
+      'bg-cyan-500', 'bg-rose-500', 'bg-amber-500'
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const getCustomerEmoji = (name) => {
+    const emojis = ['👤', '👨', '👩', '🧑', '👨‍💼', '👩‍💼', '🧑‍💼', '👨‍💻', '👩‍💻', '🧑‍💻'];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return emojis[Math.abs(hash) % emojis.length];
+  };
+
+  const formatPhone = (phone) => {
+    if (!phone) return '-';
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 10) {
+      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+    }
+    if (cleaned.length === 9) {
+      return `${cleaned.slice(0, 2)} ${cleaned.slice(2, 5)} ${cleaned.slice(5)}`;
+    }
+    return phone;
+  };
+
+  const getStatusBadge = (status) => {
+    const isActive = (status || 'Active') === 'Active';
+    return isActive 
+      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
+      : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800';
+  };
+
+  const getStatIcon = (type) => {
+    const icons = {
+      total: <UsersIcon className="w-5 h-5 text-indigo-500" />,
+      active: <CheckCircle className="w-5 h-5 text-emerald-500" />,
+      withPhone: <Phone className="w-5 h-5 text-yellow-500" />,
+      totalBalance: <DollarSign className="w-5 h-5 text-purple-500" />
+    };
+    return icons[type] || icons.total;
+  };
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await fetchCustomers();
+  }, [fetchCustomers]);
+
+  // ============================================
+  // INITIAL LOAD
+  // ============================================
   useEffect(() => {
     isMounted.current = true;
     fetchCustomers();
@@ -178,243 +734,9 @@ const Customers = () => {
     };
   }, [search, fetchCustomers]);
 
-  // ===== HANDLE SUBMIT - FIXED ✅ =====
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    
-    if (!formData.FIRST_NAME || !formData.LAST_NAME) {
-      showMessage('❌ First name and last name are required', 'error');
-      setSubmitting(false);
-      return;
-    }
-
-    try {
-      const submitData = {
-        ...formData,
-        BALANCE: formData.BALANCE ? parseFloat(formData.BALANCE) : 0
-      };
-
-      if (editingCustomer) {
-        const customerId = editingCustomer.CUS_ID || editingCustomer.cus_id || editingCustomer.ID;
-        // ✅ FIXED: Removed '/api' prefix
-        await api.put(`/api/customers/${customerId}`, submitData);
-        showMessage('✅ Customer updated successfully!');
-      } else {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.post('/api/customers', submitData);
-        showMessage('✅ Customer created successfully!');
-      }
-      
-      setShowModal(false);
-      setEditingCustomer(null);
-      resetForm();
-      fetchCustomers();
-    } catch (error) {
-      console.error('Submit error:', error.response?.data || error.message);
-      showMessage(`❌ ${error.response?.data?.error || 'Failed to save customer'}`, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ===== HANDLE DELETE - FIXED ✅ =====
-  const handleDelete = useCallback(async (id) => {
-    if (!window.confirm('Are you sure you want to delete this customer?')) return;
-    
-    try {
-      // ✅ FIXED: Removed '/api' prefix
-      await api.delete(`/api/customers/${id}`);
-      showMessage('✅ Customer deleted successfully!');
-      fetchCustomers();
-    } catch (error) {
-      console.error('Delete error:', error);
-      showMessage('❌ Failed to delete customer', 'error');
-    }
-  }, [fetchCustomers, showMessage]);
-
-  // ===== BULK DELETE - FIXED ✅ =====
-  const handleBulkDelete = useCallback(async () => {
-    if (selectedCustomers.length === 0) return;
-    if (!window.confirm(`Delete ${selectedCustomers.length} selected customers?`)) return;
-
-    try {
-      for (const id of selectedCustomers) {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.delete(`/api/customers/${id}`);
-      }
-      showMessage(`✅ ${selectedCustomers.length} customers deleted!`);
-      setSelectedCustomers([]);
-      fetchCustomers();
-    } catch (error) {
-      console.error('Bulk delete error:', error);
-      showMessage('❌ Failed to delete some customers', 'error');
-    }
-  }, [selectedCustomers, fetchCustomers, showMessage]);
-
-  // ===== RESET FORM =====
-  const resetForm = useCallback(() => {
-    setFormData({ 
-      FIRST_NAME: '', 
-      LAST_NAME: '', 
-      PHONE: '', 
-      E_MAIL: '', 
-      ADDRESS: '', 
-      BALANCE: '',
-      STATUS: 'Active' 
-    });
-  }, []);
-
-  // ===== OPEN MODAL =====
-  const openEditModal = useCallback((customer) => {
-    setEditingCustomer(customer);
-    setFormData({
-      FIRST_NAME: customer.FIRST_NAME || customer.first_name || '',
-      LAST_NAME: customer.LAST_NAME || customer.last_name || '',
-      PHONE: customer.PHONE || customer.phone || '',
-      E_MAIL: customer.E_MAIL || customer.e_mail || '',
-      ADDRESS: customer.ADDRESS || customer.address || '',
-      BALANCE: customer.BALANCE || customer.balance || '',
-      STATUS: customer.STATUS || customer.status || 'Active'
-    });
-    setShowModal(true);
-  }, []);
-
-  const openAddModal = useCallback(() => {
-    setEditingCustomer(null);
-    resetForm();
-    setShowModal(true);
-  }, [resetForm]);
-
-  // ===== TOGGLE SELECT =====
-  const toggleSelect = useCallback((id) => {
-    setSelectedCustomers(prev => {
-      if (prev.includes(id)) {
-        return prev.filter(p => p !== id);
-      } else {
-        return [...prev, id];
-      }
-    });
-  }, []);
-
-  // ===== TOGGLE SELECT ALL =====
-  const toggleSelectAll = useCallback(() => {
-    if (selectedCustomers.length === customers.length) {
-      setSelectedCustomers([]);
-    } else {
-      setSelectedCustomers(customers.map(c => c.CUS_ID || c.cus_id || c.ID));
-    }
-  }, [selectedCustomers, customers]);
-
-  // ===== FILTERED & SORTED CUSTOMERS =====
-  const filteredCustomers = useMemo(() => {
-    let result = [...customers];
-
-    if (filterStatus === 'active') {
-      result = result.filter(c => (c.STATUS || c.status || 'Active') === 'Active');
-    } else if (filterStatus === 'inactive') {
-      result = result.filter(c => (c.STATUS || c.status || 'Active') !== 'Active');
-    } else if (filterStatus === 'withBalance') {
-      result = result.filter(c => Number(c.BALANCE || c.balance || 0) > 0);
-    }
-
-    result.sort((a, b) => {
-      let comparison = 0;
-      const aVal = a[sortBy] || '';
-      const bVal = b[sortBy] || '';
-      
-      if (typeof aVal === 'string') {
-        comparison = aVal.localeCompare(bVal);
-      } else if (typeof aVal === 'number') {
-        comparison = aVal - bVal;
-      } else {
-        comparison = String(aVal).localeCompare(String(bVal));
-      }
-      
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-
-    return result;
-  }, [customers, filterStatus, sortBy, sortOrder]);
-
-  // ===== FORMAT NAME =====
-  const getFullName = (customer) => {
-    const firstName = customer.FIRST_NAME || customer.first_name || '';
-    const lastName = customer.LAST_NAME || customer.last_name || '';
-    return `${firstName} ${lastName}`.trim() || 'Unknown';
-  };
-
-  // ===== GET INITIALS =====
-  const getInitials = (customer) => {
-    const firstName = customer.FIRST_NAME || customer.first_name || '';
-    const lastName = customer.LAST_NAME || customer.last_name || '';
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || '?';
-  };
-
-  // ===== GET AVATAR COLOR =====
-  const getAvatarColor = (name) => {
-    const colors = [
-      'bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 
-      'bg-blue-500', 'bg-green-500', 'bg-yellow-500',
-      'bg-red-500', 'bg-orange-500', 'bg-teal-500',
-      'bg-cyan-500', 'bg-rose-500', 'bg-amber-500'
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-  };
-
-  // ===== GET CUSTOMER EMOJI =====
-  const getCustomerEmoji = (name) => {
-    const emojis = ['👤', '👨', '👩', '🧑', '👨‍💼', '👩‍💼', '🧑‍💼', '👨‍💻', '👩‍💻', '🧑‍💻'];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return emojis[Math.abs(hash) % emojis.length];
-  };
-
-  // ===== FORMAT PHONE =====
-  const formatPhone = (phone) => {
-    if (!phone) return '-';
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 10) {
-      return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
-    }
-    if (cleaned.length === 9) {
-      return `${cleaned.slice(0, 2)} ${cleaned.slice(2, 5)} ${cleaned.slice(5)}`;
-    }
-    return phone;
-  };
-
-  // ===== GET STATUS BADGE =====
-  const getStatusBadge = (status) => {
-    const isActive = (status || 'Active') === 'Active';
-    return isActive 
-      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-      : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800';
-  };
-
-  // ===== GET STAT ICON =====
-  const getStatIcon = (type) => {
-    const icons = {
-      total: <UsersIcon className="w-5 h-5 text-indigo-500" />,
-      active: <CheckCircle className="w-5 h-5 text-emerald-500" />,
-      withPhone: <Phone className="w-5 h-5 text-yellow-500" />,
-      totalBalance: <DollarSign className="w-5 h-5 text-purple-500" />
-    };
-    return icons[type] || icons.total;
-  };
-
-  // ===== REFRESH =====
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await fetchCustomers();
-  }, [fetchCustomers]);
-
-  // ===== RENDER =====
+  // ============================================
+  // RENDER
+  // ============================================
   return (
     <div className="space-y-4 p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen">
       
@@ -444,7 +766,7 @@ const Customers = () => {
         </div>
       )}
 
-      {/* ===== HEADER WITH STATS - 3D Tilt Effect ===== */}
+      {/* ===== HEADER WITH STATS ===== */}
       <div 
         ref={headerRef}
         className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden transition-all duration-300"
@@ -453,13 +775,10 @@ const Customers = () => {
           transition: 'transform 0.1s ease-out'
         }}
       >
-        {/* Animated Background */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full animate-pulse-slow" />
           <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-purple-300/20 rounded-full animate-pulse-slow animation-delay-1000" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-white/5 rounded-full animate-spin-slow" />
-          <div className="absolute top-10 right-20 text-4xl animate-float-delayed opacity-20">✦</div>
-          <div className="absolute bottom-10 left-10 text-3xl animate-float-delayed animation-delay-2000 opacity-20">◈</div>
         </div>
 
         <div className="relative z-10 flex flex-wrap justify-between items-center">
@@ -496,7 +815,6 @@ const Customers = () => {
           </div>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 relative z-10">
           {[
             { label: 'Total Customers', value: customerStats.total, icon: 'total' },
@@ -519,7 +837,6 @@ const Customers = () => {
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-4 hover:shadow-md transition-all duration-300">
         <div className="flex flex-wrap justify-between items-center gap-3">
           <div className="flex flex-wrap items-center gap-3 flex-1">
-            {/* Search */}
             <div className="relative flex-1 min-w-[200px] group">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-hover:text-indigo-500 transition-colors w-4 h-4" />
               <input
@@ -531,7 +848,6 @@ const Customers = () => {
               />
             </div>
 
-            {/* Filter */}
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
@@ -543,7 +859,6 @@ const Customers = () => {
               <option value="withBalance">With Balance</option>
             </select>
 
-            {/* Sort */}
             <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
               <select
                 value={sortBy}
@@ -565,7 +880,6 @@ const Customers = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* View Mode */}
             <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 p-1 rounded-xl">
               <button
                 onClick={() => setViewMode('grid')}
@@ -591,7 +905,6 @@ const Customers = () => {
               </button>
             </div>
 
-            {/* Bulk Actions */}
             {selectedCustomers.length > 0 && (
               <button
                 onClick={handleBulkDelete}
@@ -605,7 +918,7 @@ const Customers = () => {
         </div>
       </div>
 
-      {/* ===== CUSTOMERS GRID ===== */}
+      {/* ===== CUSTOMERS DISPLAY ===== */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4">
           <div className="relative">
@@ -640,10 +953,8 @@ const Customers = () => {
         // ===== GRID VIEW =====
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredCustomers.map((customer, index) => {
-            const id = customer.CUS_ID || customer.cus_id || customer.ID;
+            const id = customer.CUS_ID || customer.cus_id || customer.ID || `cust-${index}`;
             const fullName = getFullName(customer);
-            const initials = getInitials(customer);
-            const avatarColor = getAvatarColor(fullName);
             const phone = customer.PHONE || customer.phone || '';
             const email = customer.E_MAIL || customer.e_mail || '';
             const address = customer.ADDRESS || customer.address || '';
@@ -651,6 +962,7 @@ const Customers = () => {
             const status = customer.STATUS || customer.status || 'Active';
             const isSelected = selectedCustomers.includes(id);
             const emoji = getCustomerEmoji(fullName);
+            const imageUrl = customer.image_url || customer.IMAGE_URL || '';
 
             return (
               <div
@@ -662,17 +974,30 @@ const Customers = () => {
                 onClick={() => toggleSelect(id)}
               >
                 <div className="p-5">
-                  {/* Header */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl ${avatarColor} shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:rotate-6`}>
-                          {emoji}
+                      {imageUrl ? (
+                        <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-700 flex-shrink-0 group-hover:scale-110 transition-transform duration-300 border-2 border-gray-200 dark:border-gray-600">
+                          <img 
+                            src={imageUrl} 
+                            alt={fullName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              console.log('❌ Image failed to load, using fallback');
+                              e.target.style.display = 'none';
+                            }}
+                          />
                         </div>
-                        <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white dark:border-gray-800 ${
-                          status === 'Active' ? 'bg-emerald-500' : 'bg-red-500'
-                        }`} />
-                      </div>
+                      ) : (
+                        <div className="relative">
+                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl ${getAvatarColor(fullName)} shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:rotate-6`}>
+                            {emoji}
+                          </div>
+                          <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white dark:border-gray-800 ${
+                            status === 'Active' ? 'bg-emerald-500' : 'bg-red-500'
+                          }`} />
+                        </div>
+                      )}
                       <div className="min-w-0">
                         <h3 className="font-semibold text-gray-800 dark:text-white truncate max-w-[120px] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                           {fullName}
@@ -709,7 +1034,6 @@ const Customers = () => {
                     </div>
                   </div>
 
-                  {/* Contact Info */}
                   <div className="space-y-1.5 mb-3">
                     {phone && (
                       <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
@@ -730,7 +1054,6 @@ const Customers = () => {
                     )}
                   </div>
 
-                  {/* Balance & Status */}
                   <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-gray-700">
                     <div className="flex items-center gap-2">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all duration-300 ${getStatusBadge(status)} group-hover:scale-105`}>
@@ -781,7 +1104,7 @@ const Customers = () => {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {filteredCustomers.map((customer, index) => {
-                  const id = customer.CUS_ID || customer.cus_id || customer.ID;
+                  const id = customer.CUS_ID || customer.cus_id || customer.ID || `cust-${index}`;
                   const fullName = getFullName(customer);
                   const phone = customer.PHONE || customer.phone || '';
                   const email = customer.E_MAIL || customer.e_mail || '';
@@ -790,6 +1113,7 @@ const Customers = () => {
                   const status = customer.STATUS || customer.status || 'Active';
                   const isSelected = selectedCustomers.includes(id);
                   const emoji = getCustomerEmoji(fullName);
+                  const imageUrl = customer.image_url || customer.IMAGE_URL || '';
 
                   return (
                     <tr 
@@ -809,7 +1133,19 @@ const Customers = () => {
                       </td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-xl">{emoji}</span>
+                          {imageUrl ? (
+                            <img 
+                              src={imageUrl} 
+                              alt={fullName}
+                              className="w-10 h-10 rounded-lg object-cover bg-gray-100 dark:bg-gray-700"
+                              onError={(e) => {
+                                console.log('❌ Image failed to load, using fallback');
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <span className="text-xl">{emoji}</span>
+                          )}
                           <span className="font-medium text-sm dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                             {fullName}
                           </span>
@@ -872,7 +1208,9 @@ const Customers = () => {
         </p>
       </div>
 
-      {/* ===== MODAL ===== */}
+      {/* ============================================ */}
+      {/* ===== MODAL WITH IMAGE UPLOAD ===== */}
+      {/* ============================================ */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp">
@@ -892,7 +1230,90 @@ const Customers = () => {
 
             <form onSubmit={handleSubmit} className="p-6">
               <div className="space-y-4">
-                {/* Name Fields */}
+                
+                {/* ===== IMAGE UPLOAD SECTION ===== */}
+                <div className="group">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-indigo-500" />
+                    Customer Photo
+                  </label>
+                  
+                  {imagePreview && (
+                    <div className="relative mb-3">
+                      <div className="w-full h-48 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600">
+                        <img 
+                          src={imagePreview} 
+                          alt="Customer preview" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all duration-300 hover:scale-110 shadow-lg"
+                        disabled={isUploading}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {isUploading && (
+                    <div className="mb-3">
+                      <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-1">
+                        <span>Processing image, please wait...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex-1 px-4 py-2.5 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:border-indigo-400 dark:hover:border-indigo-500 transition-all duration-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/10 group flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={submitting || isUploading}
+                    >
+                      {isUploading ? (
+                        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4 text-gray-400 group-hover:text-indigo-500 transition-colors" />
+                      )}
+                      <span className="text-sm text-gray-500 dark:text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {isUploading ? 'Processing...' : imagePreview ? 'Change Photo' : 'Upload Photo'}
+                      </span>
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageSelect}
+                      className="hidden"
+                      disabled={submitting || isUploading}
+                    />
+                    {imagePreview && (
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        className="px-3 py-2.5 bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-xl hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-300 hover:scale-105 disabled:opacity-50"
+                        disabled={isUploading}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                    Supported: JPG, PNG, WEBP, GIF (Max 5MB)
+                  </p>
+                </div>
+
+                {/* ===== Name Fields ===== */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="group">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
@@ -924,7 +1345,7 @@ const Customers = () => {
                   </div>
                 </div>
 
-                {/* Phone */}
+                {/* ===== Phone ===== */}
                 <div className="group">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                     <Phone className="w-4 h-4" />
@@ -940,7 +1361,7 @@ const Customers = () => {
                   />
                 </div>
 
-                {/* Email */}
+                {/* ===== Email ===== */}
                 <div className="group">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                     <Mail className="w-4 h-4" />
@@ -956,7 +1377,7 @@ const Customers = () => {
                   />
                 </div>
 
-                {/* Address */}
+                {/* ===== Address ===== */}
                 <div className="group">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                     <MapPin className="w-4 h-4" />
@@ -972,7 +1393,7 @@ const Customers = () => {
                   />
                 </div>
 
-                {/* Balance */}
+                {/* ===== Balance ===== */}
                 <div className="group">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1">
                     <DollarSign className="w-4 h-4" />
@@ -993,7 +1414,7 @@ const Customers = () => {
                   </p>
                 </div>
 
-                {/* Status */}
+                {/* ===== Status ===== */}
                 <div className="group">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Status</label>
                   <select
@@ -1008,7 +1429,7 @@ const Customers = () => {
                 </div>
               </div>
 
-              {/* Actions */}
+              {/* ===== Actions ===== */}
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button 
                   type="button" 
@@ -1021,12 +1442,17 @@ const Customers = () => {
                 <button 
                   type="submit" 
                   className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all duration-300 hover:scale-105 font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  disabled={submitting}
+                  disabled={submitting || isUploading}
                 >
                   {submitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Saving...
+                    </>
+                  ) : isUploading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processing image...
                     </>
                   ) : (
                     <>
@@ -1042,7 +1468,7 @@ const Customers = () => {
       )}
 
       {/* ===== CSS ANIMATIONS ===== */}
-      <style jsx>{`
+      <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
@@ -1062,10 +1488,6 @@ const Customers = () => {
         @keyframes float {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-10px); }
-        }
-        @keyframes float-delayed {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-15px) rotate(10deg); }
         }
         @keyframes pulse-slow {
           0%, 100% { opacity: 0.2; transform: scale(1); }
@@ -1093,7 +1515,6 @@ const Customers = () => {
         .animate-slideInRight { animation: slideInRight 0.5s ease-out forwards; }
         .animate-slideUp { animation: slideUp 0.4s ease-out forwards; opacity: 0; }
         .animate-float { animation: float 3s ease-in-out infinite; }
-        .animate-float-delayed { animation: float-delayed 4s ease-in-out infinite; }
         .animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
         .animate-spin-slow { animation: spin-slow 20s linear infinite; }
         .animate-bar1 { animation: bar1 1.5s ease-in-out infinite; }
@@ -1103,7 +1524,6 @@ const Customers = () => {
         .animation-delay-1000 { animation-delay: 1s; }
         .animation-delay-2000 { animation-delay: 2s; }
 
-        /* Scrollbar */
         ::-webkit-scrollbar {
           width: 6px;
           height: 6px;

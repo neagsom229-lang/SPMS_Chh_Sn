@@ -15,14 +15,36 @@ import { motion, AnimatePresence } from 'framer-motion';
 // ============================================
 // API CONFIGURATION
 // ============================================
-const API_URL = import.meta.env?.VITE_API_URL || '';
+const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+console.log('🔧 API_BASE (Profile):', API_BASE);
+
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
 });
+
+api.interceptors.request.use(
+  config => {
+    console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
+api.interceptors.response.use(
+  response => {
+    console.log('📥 API Response:', response.status, response.config.url);
+    return response;
+  },
+  error => {
+    console.error('❌ API Error:', error.response?.status, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
 
 // ============================================
 // PROFILE COMPONENT
@@ -137,13 +159,11 @@ const Profile = ({ user }) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       showMessage('❌ Please select an image file', 'error');
       return;
     }
 
-    // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
       showMessage('❌ Image size should be less than 2MB', 'error');
       return;
@@ -162,8 +182,6 @@ const Profile = ({ user }) => {
       setIsUploading(false);
     };
     reader.readAsDataURL(file);
-
-    // Reset input
     event.target.value = '';
   };
 
@@ -173,6 +191,94 @@ const Profile = ({ user }) => {
       localStorage.removeItem('userAvatar');
       setAvatarPreview(null);
       showMessage('🗑️ Avatar removed', 'info');
+    }
+  };
+
+  // ===== SHOW MESSAGE =====
+  const showMessage = (text, type = 'success') => {
+    setMessage(text);
+    setMessageType(type);
+    setShowSuccess(type === 'success');
+    if (messageTimeout.current) clearTimeout(messageTimeout.current);
+    messageTimeout.current = setTimeout(() => {
+      setMessage('');
+      setShowSuccess(false);
+    }, 4000);
+  };
+
+  // ===== ✅ FIXED: FETCH USER STATS =====
+  const fetchUserStats = async () => {
+    try {
+      // ✅ Use correct API endpoints with proper error handling
+      const [ordersRes, customersRes, statsRes] = await Promise.all([
+        api.get('/orders').catch(() => ({ data: [] })),
+        api.get('/customers').catch(() => ({ data: [] })),
+        api.get('/dashboard/stats').catch(() => ({ data: {} }))
+      ]);
+
+      // ✅ Ensure data is an array before using array methods
+      let orders = [];
+      let customers = [];
+      let revenue = {};
+
+      // ✅ Safely extract orders data
+      if (Array.isArray(ordersRes.data)) {
+        orders = ordersRes.data;
+      } else if (ordersRes.data?.data && Array.isArray(ordersRes.data.data)) {
+        orders = ordersRes.data.data;
+      } else if (ordersRes.data?.orders && Array.isArray(ordersRes.data.orders)) {
+        orders = ordersRes.data.orders;
+      } else {
+        orders = [];
+      }
+
+      // ✅ Safely extract customers data
+      if (Array.isArray(customersRes.data)) {
+        customers = customersRes.data;
+      } else if (customersRes.data?.data && Array.isArray(customersRes.data.data)) {
+        customers = customersRes.data.data;
+      } else if (customersRes.data?.customers && Array.isArray(customersRes.data.customers)) {
+        customers = customersRes.data.customers;
+      } else {
+        customers = [];
+      }
+
+      // ✅ Safely extract stats data
+      if (statsRes.data) {
+        revenue = statsRes.data;
+      }
+
+      // ✅ Calculate stats safely
+      const totalOrders = orders.length;
+      const totalCustomers = customers.length;
+      const totalRevenue = revenue.totalRevenue || 0;
+      
+      // ✅ Calculate completion rate safely
+      const completedOrders = orders.filter(o => {
+        const status = o.STATUS || o.status || '';
+        return status === 'Completed' || status === 'COMPLETED';
+      });
+      const completionRate = totalOrders > 0 
+        ? Math.round((completedOrders.length / totalOrders) * 100) 
+        : 0;
+
+      setStats({
+        totalOrders,
+        totalCustomers,
+        totalRevenue,
+        completionRate
+      });
+
+      console.log('📊 Stats loaded:', { totalOrders, totalCustomers, totalRevenue, completionRate });
+    } catch (error) {
+      console.error('❌ Error fetching user stats:', error);
+      // ✅ Set default stats on error
+      setStats({
+        totalOrders: 0,
+        totalCustomers: 0,
+        totalRevenue: 0,
+        completionRate: 0
+      });
     }
   };
 
@@ -209,7 +315,6 @@ const Profile = ({ user }) => {
         });
       }
 
-      // Load saved avatar
       loadAvatarFromStorage();
       await fetchUserStats();
     } catch (error) {
@@ -224,42 +329,6 @@ const Profile = ({ user }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // ===== FETCH USER STATS =====
-  const fetchUserStats = async () => {
-    try {
-      const [ordersRes, customersRes, revenueRes] = await Promise.all([
-        api.get('/api/orders').catch(() => ({ data: [] })),
-        api.get('/api/customers').catch(() => ({ data: [] })),
-        api.get('/api/dashboard/stats').catch(() => ({ data: {} }))
-      ]);
-
-      const orders = ordersRes.data || [];
-      const customers = customersRes.data || [];
-      const revenue = revenueRes.data || {};
-
-      setStats({
-        totalOrders: orders.length,
-        totalCustomers: customers.length,
-        totalRevenue: revenue.totalRevenue || 0,
-        completionRate: orders.length > 0 ? Math.round((orders.filter(o => o.STATUS === 'Completed').length / orders.length) * 100) : 0
-      });
-    } catch (error) {
-      console.error('Error fetching user stats:', error);
-    }
-  };
-
-  // ===== SHOW MESSAGE =====
-  const showMessage = (text, type = 'success') => {
-    setMessage(text);
-    setMessageType(type);
-    setShowSuccess(type === 'success');
-    if (messageTimeout.current) clearTimeout(messageTimeout.current);
-    messageTimeout.current = setTimeout(() => {
-      setMessage('');
-      setShowSuccess(false);
-    }, 4000);
   };
 
   // ===== HANDLE UPDATE PROFILE =====
@@ -367,6 +436,7 @@ const Profile = ({ user }) => {
     return () => {
       if (messageTimeout.current) clearTimeout(messageTimeout.current);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ===== LOADING =====
@@ -671,7 +741,6 @@ const Profile = ({ user }) => {
                 </span>
               </div>
 
-              {/* Upload Status */}
               {isUploading && (
                 <div className="mt-3 flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400">
                   <Loader2 className="w-4 h-4 animate-spin" />

@@ -13,9 +13,11 @@ import {
 } from 'lucide-react';
 
 // ============================================
-// API CONFIGURATION - FIXED ✅
+// API CONFIGURATION — FIXED ✅
+// Same pattern as Suppliers.jsx: baseURL points at the real backend,
+// every call below is relative to it (e.g. '/users', not '/api/users').
 // ============================================
-const API_BASE = import.meta.env?.VITE_API_URL || '';
+const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
 const api = axios.create({
   baseURL: API_BASE,
   timeout: 15000,
@@ -99,12 +101,11 @@ const Users = () => {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // ===== FETCH USERS - FIXED ✅ =====
+  // ===== FETCH USERS — FIXED ✅ (consistent '/users' relative to API_BASE) =====
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      // ✅ FIXED: Removed '/api' prefix
-      const res = await api.get('api/users', {
+      const res = await api.get('/users', {
         params: { search: searchTerm || undefined }
       });
       if (isMounted.current) {
@@ -222,7 +223,7 @@ const Users = () => {
     return result;
   }, [users, filterRole, filterStatus, sortBy, sortOrder]);
 
-  // ===== HANDLE SUBMIT - FIXED ✅ =====
+  // ===== HANDLE SUBMIT — FIXED ✅ (POST now goes to '/users', matching PUT/DELETE) =====
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -255,12 +256,10 @@ const Users = () => {
       };
       
       if (editingUser) {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.put(`/api/users/${editingUser.user_id}`, submitData);
+        await api.put(`/users/${editingUser.user_id}`, submitData);
         showMessage('✅ User updated successfully!');
       } else {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.post('/api/users', submitData);
+        await api.post('/users', submitData);
         showMessage('✅ User created successfully!');
       }
       
@@ -276,7 +275,7 @@ const Users = () => {
     }
   };
 
-  // ===== HANDLE DELETE - FIXED ✅ =====
+  // ===== HANDLE DELETE — FIXED ✅ =====
   const handleDelete = useCallback(async (id) => {
     if (id === 1) {
       showMessage('❌ Cannot delete the admin user', 'error');
@@ -285,8 +284,7 @@ const Users = () => {
     if (!window.confirm('Are you sure you want to delete this user?')) return;
     
     try {
-      // ✅ FIXED: Removed '/api' prefix
-      await api.delete(`/api/users/${id}`);
+      await api.delete(`/users/${id}`);
       showMessage('✅ User deleted successfully!');
       fetchUsers();
     } catch (error) {
@@ -295,7 +293,7 @@ const Users = () => {
     }
   }, [fetchUsers, showMessage]);
 
-  // ===== BULK DELETE - FIXED ✅ =====
+  // ===== BULK DELETE — FIXED ✅ =====
   const handleBulkDelete = useCallback(async () => {
     if (selectedUsers.length === 0) return;
     if (selectedUsers.includes(1)) {
@@ -305,10 +303,8 @@ const Users = () => {
     if (!window.confirm(`Delete ${selectedUsers.length} selected users?`)) return;
 
     try {
-      for (const id of selectedUsers) {
-        // ✅ FIXED: Removed '/api' prefix
-        await api.delete(`/api/users/${id}`);
-      }
+      // Run deletes in parallel instead of sequential await-in-loop
+      await Promise.all(selectedUsers.map(id => api.delete(`/users/${id}`)));
       showMessage(`✅ ${selectedUsers.length} users deleted!`);
       setSelectedUsers([]);
       fetchUsers();
@@ -501,7 +497,7 @@ const Users = () => {
   return (
     <div className="space-y-4 p-3 sm:p-4 md:p-6 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 min-h-screen">
       
-      {/* ===== MESSAGE TOAST - FIXED ✅ ===== */}
+      {/* ===== MESSAGE TOAST ===== */}
       {message && (
         <div className={`fixed top-4 right-4 z-50 max-w-md w-full p-4 rounded-xl shadow-2xl border transform transition-all duration-500 animate-slideInRight ${
           messageType === 'success' 
@@ -1244,8 +1240,8 @@ const Users = () => {
         </div>
       )}
 
-      {/* ===== CSS ANIMATIONS ===== */}
-      <style jsx>{`
+      {/* ===== CSS ANIMATIONS — FIXED ✅ removed invalid `jsx` attribute (Next.js-only, not valid in plain React/Vite) ===== */}
+      <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }

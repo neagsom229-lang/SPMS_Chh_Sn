@@ -1,5 +1,6 @@
+
 {
-  "name": "spms-chh-sn",
+  "name": "spms-app",
   "version": "1.0.0",
   "scripts": {
     "install:all": "npm install --prefix backend && npm install --prefix frontend",
@@ -11,10 +12,5 @@
   },
   "devDependencies": {
     "concurrently": "^8.0.1"
-  },
-  "dependencies": {
-    "multer": "^2.2.0",
-    "react-icons": "^5.7.0",
-    "recharts": "^3.10.0"
   }
 }

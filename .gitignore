@@ -1,54 +1,124 @@
-# Node modules
+# ============= NODE =============
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
-# Environment variables
+# ============= ENVIRONMENT =============
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*.local
 
-# Build outputs
+# ============= BUILD OUTPUTS =============
 dist/
 build/
 .vercel/
 out/
+.next/
+.cache/
+*.tsbuildinfo
 
-# Database files (if you don't want to include)
+# ============= DATABASE =============
+*.sqlite
+*.sqlite3
+*.db
 *.accdb
 *.accdb.lock
 *.mdb
 *.mdb.lock
+*.ldb
 
+# ============= BACKEND SPECIFIC =============
+backend/node_modules/
+backend/.env
+backend/uploads/
+backend/temp/
+backend/logs/
+backend/*.log
+backend/dist/
+backend/build/
 
-# IDE
+# ============= FRONTEND SPECIFIC =============
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production
+frontend/build/
+frontend/.cache/
+
+# ============= IDE & EDITORS =============
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+*.iml
+*.code-workspace
 
-# Logs
+# ============= LOGS =============
 logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Misc
-node_modules/
+# ============= MISC =============
 coverage/
 .nyc_output/
 tmp/
 temp/
 *.pem
+*.key
+*.cert
+*.crt
+*.p12
 
-# Git
+# ============= GIT =============
 .git/
 .gitignore
 .gitattributes
+.gitmodules
 
-# OS
+# ============= OS =============
 Thumbs.db
+.DS_Store
+desktop.ini
+
+# ============= TESTING =============
+*.test.js
+*.spec.js
+__tests__/
+coverage/
+
+# ============= DEPLOYMENT =============
 .vercel
+.netlify
+.elasticbeanstalk
+.serverless
+
+# ============= BACKUP =============
+*.bak
+*.old
+*.orig
+*.tmp
+*.temp
+
+# ============= MEDIA FILES (optional) =============
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mov
+*.mkv
+*.zip
+*.rar
+*.7z
+*.tar.gz
+*.tgz

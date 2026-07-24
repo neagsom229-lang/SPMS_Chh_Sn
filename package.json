@@ -1,4 +1,3 @@
-
 {
   "name": "spms-app",
   "version": "1.0.0",
@@ -8,7 +7,8 @@
     "dev:frontend": "cd frontend && npm run dev",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "start": "cd backend && node server.js",
-    "build": "cd frontend && npm run build"
+    "build": "cd frontend && npm run build",
+    "vercel-build": "npm run build"
   },
   "devDependencies": {
     "concurrently": "^8.0.1"
